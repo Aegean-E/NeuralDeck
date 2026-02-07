@@ -1,0 +1,11 @@
+{
+    "name": "Local AI Anki Cards Bridge",
+    "package": "LocalAIAnkiCardsBridge",
+    "api": "2.1",
+    "version": "1.0",
+    "config": {
+        "port": 5005,
+        "default_model": "AI Generated Model",
+        "api_key": null
+    }
+}
