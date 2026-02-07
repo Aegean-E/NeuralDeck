@@ -1,0 +1,18 @@
+{
+    "theme": "darkly",
+    "language": "English",
+    "api_url": "http://localhost:1234/v1/chat/completions",
+    "api_key": "lm-studio",
+    "model": "local-model",
+    "temperature": 0.3,
+    "max_tokens": -1,
+    "context_window": 4096,
+    "card_density": "Medium",
+    "concurrency": 1,
+    "filter_yes_no": true,
+    "exclude_trivia": true,
+    "smart_deck_match": true,
+    "ai_refinement": false,
+    "prompt_style": "",
+    "selected_decks": []
+}
