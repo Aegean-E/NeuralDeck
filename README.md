@@ -1,5 +1,9 @@
 # NeuralDeck - Local LLM Anki Cards Generator
 
+<p align="center">
+  <img src="https://github.com/Aegean-E/NeuralDeck/blob/main/banner.png?raw=true" alt="NeuralDeck Banner" width="1200">
+</p>
+
 A local, privacy-focused desktop application that generates high-quality Anki flashcards from PDF documents using Local LLMs (like Llama 3 via LM Studio). It features a custom Anki add-on for seamless synchronization, smart deck matching, and AI-powered refinement.
 
 ## Features
