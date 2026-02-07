@@ -1,4 +1,4 @@
-# NeuralDeck - Local LLM Anki Cards Generator
+# NeuralDeck 0.1 - Local LLM Anki Cards Generator
 
 <p align="center">
   <img src="https://github.com/Aegean-E/NeuralDeck/blob/main/banner.png?raw=true" alt="NeuralDeck Banner" width="1200">
