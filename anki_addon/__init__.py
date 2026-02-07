@@ -2,6 +2,7 @@ import json
 import threading
 import os
 import base64
+import traceback
 from concurrent.futures import Future
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from aqt import mw
@@ -47,6 +48,7 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"decks": decks}).encode('utf-8'))
             except Exception as e:
+                traceback.print_exc()
                 self.send_error(500, str(e))
 
     def do_POST(self):
@@ -77,9 +79,10 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"status": "success", "count": count}).encode('utf-8'))
             except Exception as e:
+                traceback.print_exc()
                 self.send_response(500)
                 self.end_headers()
-                self.wfile.write(json.dumps({"status": "error", "message": str(e)}).encode('utf-8'))
+                self.wfile.write(json.dumps({"status": "error", "message": str(e), "traceback": traceback.format_exc()}).encode('utf-8'))
         else:
             self.send_response(404)
             self.end_headers()
@@ -91,6 +94,7 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
             
         if not deck_name:
             raise Exception("Deck name is missing.")
+        deck_name = deck_name.strip()
         
         # 0. Process Media (Future proofing for images/audio)
         if media_files:
@@ -105,20 +109,36 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
 
         # 1. Get/Create Deck
         deck_id = col.decks.id(deck_name)
-        col.decks.select(deck_id)
         
         # 2. Get/Create Model
         model = col.models.by_name(model_name)
         if not model:
             model = col.models.new(model_name)
-            model['fields'] = [{'name': 'Question'}, {'name': 'Answer'}]
-            model['tmpls'] = [{
-                'name': 'Card 1',
-                'qfmt': '{{Question}}',
-                'afmt': '{{FrontSide}}<hr id="answer">{{Answer}}',
-            }]
+            
+            # Fix for "1 field required" and KeyError issues
+            # 1. Ensure basic structure exists and is Standard type (0)
+            model['type'] = 0 
+            model['flds'] = []
+            model['tmpls'] = []
+            
+            # 2. Create fields using helper
+            f1 = col.models.new_field("Question")
+            f2 = col.models.new_field("Answer")
+            model['flds'].append(f1)
+            model['flds'].append(f2)
+            
+            # 3. Create template using helper
+            t = col.models.new_template("Card 1")
+            t['qfmt'] = '{{Question}}'
+            t['afmt'] = '{{FrontSide}}<hr id="answer">{{Answer}}'
+            model['tmpls'].append(t)
+            
+            # 4. CRITICAL: Clear 'req' (required fields) to force Anki to regenerate it
+            # This fixes the "1 field required" validation error caused by stale cache
+            if 'req' in model:
+                del model['req']
+            
             col.models.add(model)
-        col.models.set_current(model)
         
         # 3. Add Notes
         count = 0
@@ -126,7 +146,7 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
             note = Note(col, model)
             
             # Smart field mapping: Use 'Question'/'Answer' if they exist, otherwise use 1st/2nd fields
-            field_names = [f['name'] for f in model['fields']]
+            field_names = [f['name'] for f in model['flds']]
             q_field = 'Question' if 'Question' in field_names else field_names[0]
             a_field = 'Answer' if 'Answer' in field_names else (field_names[1] if len(field_names) > 1 else None)
             
