@@ -222,7 +222,7 @@ class AnkiGeneratorUI(ttk.Window):
         theme_combo.bind("<<ComboboxSelected>>", self.apply_theme)
         
         # AI Settings
-        ai_frame = ttk.Labelframe(container, text="AI Server Configuration (LM Studio / OpenAI)", padding=15)
+        ai_frame = ttk.Labelframe(container, text="AI Server Configuration (OpenAI Compatible / Local LLM)", padding=15)
         ai_frame.pack(fill=X, pady=10)
         
         ai_grid = ttk.Frame(ai_frame)

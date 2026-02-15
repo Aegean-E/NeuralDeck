@@ -175,9 +175,14 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
 def run_server():
     global httpd
     server_address = ('localhost', PORT)
-    httpd = HTTPServer(server_address, AnkiBridgeHandler)
-    print(f"Anki Bridge running on port {PORT}...")
-    httpd.serve_forever()
+    try:
+        httpd = HTTPServer(server_address, AnkiBridgeHandler)
+        print(f"Anki Bridge running on port {PORT}...")
+        httpd.serve_forever()
+    except OSError:
+        msg = f"NeuralDeck Error: Port {PORT} is already in use."
+        print(msg)
+        mw.taskman.run_on_main(lambda: tooltip(msg))
 
 def stop_server():
     global httpd
