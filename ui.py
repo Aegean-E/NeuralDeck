@@ -32,10 +32,12 @@ class CardReviewRow(ttk.Frame):
         self.q_entry = ttk.Entry(self)
         self.q_entry.insert(0, question)
         self.q_entry.grid(row=0, column=1, sticky=EW, padx=5, pady=2)
+        ToolTip(self.q_entry, text="Edit Question")
         
         self.a_entry = ttk.Entry(self)
         self.a_entry.insert(0, answer)
         self.a_entry.grid(row=1, column=1, sticky=EW, padx=5, pady=2)
+        ToolTip(self.a_entry, text="Edit Answer")
         
         # Deck Selection
         self.deck_var = ttk.StringVar(value=assigned_deck)
@@ -107,10 +109,16 @@ class AnkiGeneratorUI(ttk.Window):
         
         self.setup_main_tab()
         self.setup_settings_tab()
+        self.setup_keyboard_shortcuts()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # Initial Fetch
         self.fetch_decks()
+
+    def setup_keyboard_shortcuts(self):
+        self.bind("<Control-o>", lambda e: self.select_file())
+        self.bind("<Control-Return>", lambda e: self.start_processing())
+        self.bind("<Control-s>", lambda e: self.sync_to_anki())
 
     def setup_main_tab(self):
         self.main_tab.columnconfigure(0, weight=1)
@@ -160,6 +168,7 @@ class AnkiGeneratorUI(ttk.Window):
         # Select PDF Button
         self.select_btn = ttk.Button(left_panel, text="Select PDF", command=self.select_file, bootstyle="primary-outline")
         self.select_btn.pack(fill=X, pady=(0, 10))
+        ToolTip(self.select_btn, text="Select PDF (Ctrl+O)")
 
         # Language Selection
         lang_frame = ttk.Frame(left_panel)
@@ -176,6 +185,7 @@ class AnkiGeneratorUI(ttk.Window):
         # Generate Button
         self.generate_btn = ttk.Button(left_panel, text="Generate Cards", command=self.start_processing, bootstyle="success")
         self.generate_btn.pack(fill=X)
+        ToolTip(self.generate_btn, text="Generate Cards (Ctrl+Enter)")
 
         # Right Panel (Deck List)
         deck_frame = ttk.Labelframe(top_frame, text="Available Decks", padding=5)
@@ -200,6 +210,7 @@ class AnkiGeneratorUI(ttk.Window):
 
         self.sync_btn = ttk.Button(btns_frame, text="Sync Approved to Anki", command=self.sync_to_anki, state="disabled")
         self.sync_btn.pack(side=TOP, fill=X)
+        ToolTip(self.sync_btn, text="Sync approved cards to Anki (Ctrl+S)")
 
     def setup_settings_tab(self):
         # Use ScrolledFrame to ensure settings are accessible on smaller screens
@@ -421,6 +432,9 @@ class AnkiGeneratorUI(ttk.Window):
         self.log_area.config(state='disabled')
 
     def start_processing(self):
+        if str(self.generate_btn['state']) == 'disabled':
+            return
+
         if not self.selected_file_path:
             messagebox.showwarning("Warning", "Please select a PDF file first.")
             return
@@ -550,6 +564,9 @@ class AnkiGeneratorUI(ttk.Window):
             row.approved_var.set(state)
 
     def sync_to_anki(self):
+        if str(self.sync_btn['state']) == 'disabled':
+            return
+
         approved_cards = []
         for row in self.card_rows:
             data = row.get_data()
