@@ -103,7 +103,15 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
                 fname = mfile.get("filename")
                 b64_data = mfile.get("data")
                 if fname and b64_data:
-                    path = os.path.join(media_dir, fname)
+                    # Security Fix: Prevent Path Traversal
+                    safe_fname = os.path.basename(fname)
+                    path = os.path.join(media_dir, safe_fname)
+
+                    # Double check it is inside media_dir
+                    if not os.path.abspath(path).startswith(os.path.abspath(media_dir)):
+                        print(f"Security Warning: Attempted path traversal to {path}")
+                        continue
+
                     with open(path, "wb") as f:
                         f.write(base64.b64decode(b64_data))
 
