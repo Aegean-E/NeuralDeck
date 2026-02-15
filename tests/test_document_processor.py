@@ -56,5 +56,30 @@ class TestDocumentProcessor(unittest.TestCase):
         self.assertEqual(len(processed), 1, "Should handle capitalized keys")
         self.assertEqual(processed[0]['question'], 'CapQ')
 
+    def test_smart_deck_matching_basic(self):
+        deck_names = ["Cardiology", "Neurology, Brain"]
+        cards = [
+            {"question": "What is heart attack?", "answer": "It is cardiology related.", "deck": "Default"},
+            {"question": "Brain damage?", "answer": "Neurology issues.", "deck": "Default"}
+        ]
+        result = filter_and_process_cards(cards, deck_names, smart_deck_match=True, filter_yes_no=False)
+        self.assertEqual(result[0]['deck'], "Cardiology")
+        self.assertEqual(result[1]['deck'], "Neurology, Brain")
+
+    def test_smart_deck_matching_empty_names(self):
+        cards = [{"question": "Q", "answer": "A", "deck": "Default"}]
+        result = filter_and_process_cards(cards, [], smart_deck_match=True, filter_yes_no=False)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['deck'], "Default")
+
+    def test_smart_deck_matching_disabled(self):
+        deck_names = ["Biology"]
+        # With smart_deck_match=False, it should NOT correct the deck based on content
+        # However, filter_and_process_cards logic for 'deck not in deck_names' might trigger fallback
+        # "Default" is not in ["Biology"], so it falls back to "Biology" (first available)
+        cards = [{"question": "Biology test", "answer": "Bio", "deck": "Default"}]
+        result = filter_and_process_cards(cards, deck_names, smart_deck_match=False, filter_yes_no=False)
+        self.assertEqual(result[0]['deck'], "Biology")
+
 if __name__ == '__main__':
     unittest.main()

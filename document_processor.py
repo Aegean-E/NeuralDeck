@@ -267,27 +267,44 @@ def filter_and_process_cards(raw_data_list, deck_names, smart_deck_match, filter
     """Helper to clean, filter, and assign decks to a list of raw card objects."""
 
     # Helper to score a deck against text based on keywords
-    def score_deck(d_name, q_txt, a_txt):
-        # Split by comma to get sub-topics (e.g. "Temel Bilgiler, Anamnez")
-        parts = [p.strip().lower() for p in d_name.split(',')]
+    def score_deck_parts(parts_data, q_txt, a_txt):
         score = 0
-        for part in parts:
-            if not part: continue
-
+        for part_info in parts_data:
+            part = part_info['text']
             # 1. Full phrase match (Highest priority in Question)
             if part in q_txt:
                 score += len(part) * 3
             elif part in a_txt:
-                score += len(part) * 1  # Lower weight for answer (avoids "Epilepsy" deck for "Tumor causes epilepsy")
-
+                score += len(part) * 1  # Lower weight for answer
             else:
-                # 2. Word match (lower weight) to catch "Muayene" in "Nörolojik Muayene"
-                words = part.split()
-                for w in words:
-                    if len(w) > 3:
-                        if w in q_txt: score += len(w) * 1.5
-                        elif w in a_txt: score += len(w) * 0.5
+                # 2. Word match (lower weight)
+                for w in part_info['words']:
+                    if w in q_txt: score += len(w) * 1.5
+                    elif w in a_txt: score += len(w) * 0.5
         return score
+
+    # Legacy wrapper for on-the-fly scoring
+    def score_deck_raw(d_name, q_txt, a_txt):
+        parts = [p.strip().lower() for p in d_name.split(',')]
+        parts_data = []
+        for part in parts:
+            if not part: continue
+            words = [w for w in part.split() if len(w) > 3]
+            parts_data.append({'text': part, 'words': words})
+        return score_deck_parts(parts_data, q_txt, a_txt)
+
+    # Pre-process deck names if smart matching is enabled
+    # Optimization: Pre-compute string splits (O(N) setup) to avoid repeated O(N*M) string operations inside the loop.
+    processed_decks = []
+    if smart_deck_match and deck_names:
+        for d_name in deck_names:
+            parts = [p.strip().lower() for p in d_name.split(',')]
+            parts_data = []
+            for part in parts:
+                if not part: continue
+                words = [w for w in part.split() if len(w) > 3]
+                parts_data.append({'text': part, 'words': words})
+            processed_decks.append({'name': d_name, 'parts': parts_data})
 
     processed_entries = [] # Stores {'card': card_dict, 'score': match_score}
     for item in raw_data_list:
@@ -335,13 +352,23 @@ def filter_and_process_cards(raw_data_list, deck_names, smart_deck_match, filter
             q_lower = q_text.lower()
             a_lower = a_text.lower()
 
-            current_score = score_deck(deck, q_lower, a_lower)
-            best_match = max(deck_names, key=lambda d: score_deck(d, q_lower, a_lower)) if deck_names else None
+            # Calculate score for the currently assigned deck (on-the-fly)
+            current_score = score_deck_raw(deck, q_lower, a_lower)
+
+            # Find best match from processed decks (optimized loop)
+            best_match_deck = None
+            best_match_score = -1
+
+            for d_data in processed_decks:
+                s = score_deck_parts(d_data['parts'], q_lower, a_lower)
+                if s > best_match_score:
+                    best_match_score = s
+                    best_match_deck = d_data['name']
 
             # Only switch if the new match is significantly better (score > 0 and better than current)
-            if best_match and score_deck(best_match, q_lower, a_lower) > current_score:
-                deck = best_match
-                current_score = score_deck(best_match, q_lower, a_lower)
+            if best_match_deck and best_match_score > 0 and best_match_score > current_score:
+                deck = best_match_deck
+                current_score = best_match_score
 
         processed_entries.append({'card': {'question': q_text, 'answer': a_text, 'deck': deck, 'quote': quote}, 'score': current_score})
 
