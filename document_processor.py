@@ -19,7 +19,7 @@ def extract_text_from_pdf(file_path):
     if PyPDF2 is None:
         raise ImportError("PyPDF2 module not found. Please install it in the add-on 'libs' folder.")
         
-    text = ""
+    text_parts = []
     try:
         with open(file_path, 'rb') as file:
             reader = PyPDF2.PdfReader(file)
@@ -34,10 +34,12 @@ def extract_text_from_pdf(file_path):
             for page in reader.pages:
                 extracted = page.extract_text()
                 if extracted:
-                    text += extracted + "\n"
+                    # Append parts to list for O(N) performance instead of O(N^2) string concatenation
+                    text_parts.append(extracted)
+                    text_parts.append("\n")
     except Exception as e:
         raise Exception(f"Failed to read PDF: {e}")
-    return text
+    return "".join(text_parts)
 
 def extract_text_from_video(file_path):
     """
