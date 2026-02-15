@@ -71,37 +71,54 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
     
     req = urllib.request.Request(api_url, data=json.dumps(payload).encode('utf-8'), headers=headers)
     
-    full_response = ""
-    
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            if response.status != 200:
-                raise Exception(f"HTTP Error {response.status}: {response.reason}")
-            
-            for line in response:
-                if stop_callback and stop_callback():
-                    raise Exception("Processing stopped by user.")
+    retries = 3
+    last_exception = None
+
+    for attempt in range(retries):
+        full_response = ""
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                if response.status != 200:
+                    raise Exception(f"HTTP Error {response.status}: {response.reason}")
                 
-                line = line.decode('utf-8').strip()
-                if line.startswith("data: "):
-                    data_str = line[6:]
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        data_json = json.loads(data_str)
-                        if 'choices' in data_json and len(data_json['choices']) > 0:
-                            delta = data_json['choices'][0].get('delta', {})
-                            content = delta.get('content', '')
-                            if content:
-                                full_response += content
-                    except:
-                        pass
-        
-        return full_response
-    except urllib.error.URLError as e:
-         raise ConnectionError(f"Could not connect to AI Server at {api_url}. Ensure the server is running. Details: {e}")
-    except socket.timeout:
-         raise Exception(f"AI Server timed out after {timeout} seconds.")
+                for line in response:
+                    if stop_callback and stop_callback():
+                        raise Exception("Processing stopped by user.")
+
+                    line = line.decode('utf-8').strip()
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data_json = json.loads(data_str)
+                            if 'choices' in data_json and len(data_json['choices']) > 0:
+                                delta = data_json['choices'][0].get('delta', {})
+                                content = delta.get('content', '')
+                                if content:
+                                    full_response += content
+                        except:
+                            pass
+
+            return full_response
+
+        except urllib.error.URLError as e:
+            last_exception = ConnectionError(f"Could not connect to AI Server at {api_url}. Ensure the server is running. Details: {e}")
+            if attempt < retries - 1:
+                time.sleep(2)
+                continue
+        except socket.timeout:
+            last_exception = Exception(f"AI Server timed out after {timeout} seconds.")
+            if attempt < retries - 1:
+                time.sleep(2)
+                continue
+        except Exception as e:
+            # Don't retry other exceptions (like "Processing stopped by user")
+            raise e
+
+    if last_exception:
+        raise last_exception
+    raise Exception("Unknown error occurred during API call.")
 
 def smart_chunk_text(text, max_chars):
     """
@@ -244,6 +261,168 @@ def refine_generated_cards(cards, deck_names, target_language, api_url, api_key,
             log_callback(f"Refinement failed: {e}. Using original cards.")
         return cards
 
+def filter_and_process_cards(raw_data_list, deck_names, smart_deck_match, filter_yes_no):
+    """Helper to clean, filter, and assign decks to a list of raw card objects."""
+
+    # Helper to score a deck against text based on keywords
+    def score_deck(d_name, q_txt, a_txt):
+        # Split by comma to get sub-topics (e.g. "Temel Bilgiler, Anamnez")
+        parts = [p.strip().lower() for p in d_name.split(',')]
+        score = 0
+        for part in parts:
+            if not part: continue
+
+            # 1. Full phrase match (Highest priority in Question)
+            if part in q_txt:
+                score += len(part) * 3
+            elif part in a_txt:
+                score += len(part) * 1  # Lower weight for answer (avoids "Epilepsy" deck for "Tumor causes epilepsy")
+
+            else:
+                # 2. Word match (lower weight) to catch "Muayene" in "Nörolojik Muayene"
+                words = part.split()
+                for w in words:
+                    if len(w) > 3:
+                        if w in q_txt: score += len(w) * 1.5
+                        elif w in a_txt: score += len(w) * 0.5
+        return score
+
+    processed_entries = [] # Stores {'card': card_dict, 'score': match_score}
+    for item in raw_data_list:
+        if not isinstance(item, dict):
+            continue
+
+        # Robustly handle question/answer fields with capitalization fallback
+        q_val = item.get('question') or item.get('Question')
+        a_val = item.get('answer') or item.get('Answer')
+
+        if not q_val or not a_val:
+            continue
+
+        q_text = " ".join(str(x) for x in q_val).strip() if isinstance(q_val, list) else str(q_val).strip()
+        a_text = " ".join(str(x) for x in a_val).strip() if isinstance(a_val, list) else str(a_val).strip()
+
+        # Filter: Strictly remove Yes/No answers
+        if filter_yes_no:
+            a_lower = a_text.lower().strip()
+            if a_lower in ['evet', 'evet.', 'hayır', 'hayır.', 'yes', 'yes.', 'no', 'no.']:
+                continue
+            if a_lower.startswith(('evet,', 'hayır,', 'yes,', 'no,')):
+                continue
+
+        deck = item.get('deck', 'Default')
+        quote = item.get('quote', '')
+
+        current_score = 0
+
+        # Enforce deck constraints if provided
+        if deck_names and deck not in deck_names:
+            # 1. Case insensitive match
+            match = next((d for d in deck_names if d.lower() == deck.lower()), None)
+            if match: deck = match
+            else:
+                # 2. Substring match
+                match = next((d for d in deck_names if d in deck), None)
+                if match: deck = match
+                else:
+                    # 3. Fallback
+                    deck = "Default" if "Default" in deck_names else (deck_names[0] if deck_names else "Default")
+
+        # 4. Smart Content-Based Correction
+        if smart_deck_match and deck_names:
+            q_lower = q_text.lower()
+            a_lower = a_text.lower()
+
+            current_score = score_deck(deck, q_lower, a_lower)
+            best_match = max(deck_names, key=lambda d: score_deck(d, q_lower, a_lower)) if deck_names else None
+
+            # Only switch if the new match is significantly better (score > 0 and better than current)
+            if best_match and score_deck(best_match, q_lower, a_lower) > current_score:
+                deck = best_match
+                current_score = score_deck(best_match, q_lower, a_lower)
+
+        processed_entries.append({'card': {'question': q_text, 'answer': a_text, 'deck': deck, 'quote': quote}, 'score': current_score})
+
+    # 5. Contextual Deck Correction (Majority Vote)
+    # If a card has a weak match (score 0), reassign it to the dominant deck of the chunk.
+    if smart_deck_match and processed_entries:
+        # Find dominant deck from high-confidence cards (score > 0)
+        high_conf_decks = [e['card']['deck'] for e in processed_entries if e['score'] > 0]
+
+        dominant_deck = None
+        if high_conf_decks:
+            dominant_deck = Counter(high_conf_decks).most_common(1)[0][0]
+        elif processed_entries:
+            # Fallback: Simple majority of all cards if no keywords matched anywhere
+            all_decks = [e['card']['deck'] for e in processed_entries]
+            dominant_deck = Counter(all_decks).most_common(1)[0][0]
+
+        if dominant_deck:
+            for entry in processed_entries:
+                if entry['score'] == 0:
+                    entry['card']['deck'] = dominant_deck
+
+    return [e['card'] for e in processed_entries]
+
+def _process_chunk_task(i, chunk, total_chunks, stop_callback, log_callback, max_tokens, system_prompt, context_window, api_url, api_key, model, temperature, ai_refinement, deck_names, target_language, filter_yes_no, smart_deck_match):
+    """Helper function to process a single chunk in a thread."""
+    if stop_callback and stop_callback():
+        return []
+
+    if log_callback:
+        log_callback(f"Processing part {i+1}/{total_chunks}... (Sending to AI)")
+
+    chunk_start = time.time()
+    user_prompt = f"Generate flashcards from the following text:\n\n{chunk}"
+
+    # Dynamic Max Tokens Logic to prevent infinite loops/context shifts
+    request_max_tokens = max_tokens
+    if request_max_tokens <= 0:
+        # Estimate prompt tokens (conservative)
+        est_prompt_tokens = (len(user_prompt) + len(system_prompt)) / 2.5
+        # Cap at 4000 to allow for high-density generation on larger contexts.
+        request_max_tokens = 4000
+
+        # Ensure we don't exceed context window
+        if est_prompt_tokens + request_max_tokens > context_window:
+            request_max_tokens = int(context_window - est_prompt_tokens - 100)
+
+        if request_max_tokens < 500: request_max_tokens = 500
+
+    chunk_cards = []
+    try:
+        response_text = call_lm_studio(user_prompt, system_prompt, api_url=api_url, api_key=api_key, model=model, temperature=temperature, max_tokens=request_max_tokens, stop_callback=stop_callback)
+        if log_callback:
+            log_callback(f"  > AI Response received for part {i+1} ({len(response_text)} chars).")
+
+        # Use robust parsing instead of fragile JSON array parsing
+        data = robust_parse_objects(response_text)
+
+        if not data and log_callback:
+            log_callback(f"Warning: No valid cards found in part {i+1}. Response might be malformed or empty.")
+
+        # First Pass: Filter and Clean
+        temp_cards = filter_and_process_cards(data, deck_names, smart_deck_match, filter_yes_no)
+
+        # Second Pass: AI Refinement (Optional)
+        if ai_refinement and temp_cards:
+            if log_callback:
+                log_callback(f"  > Refining {len(temp_cards)} cards with AI (Check -> Edit)...")
+
+            # Note: We don't pass log_callback to refinement inside thread to avoid UI race conditions, or we rely on thread-safe logging
+            refined_raw = refine_generated_cards(temp_cards, deck_names, target_language, api_url, api_key, model, temperature, log_callback, stop_callback)
+            # IMPORTANT: Re-run filter on refined cards to catch any "Yes/No" answers the AI might have re-introduced
+            chunk_cards = filter_and_process_cards(refined_raw, deck_names, smart_deck_match, filter_yes_no)
+        else:
+            chunk_cards = temp_cards
+
+    except Exception as e:
+        if log_callback:
+            log_callback(f"Error processing part {i+1}: {e}")
+        return []
+
+    return chunk_cards
+
 def generate_qa_pairs(text, deck_names=[], target_language="English", log_callback=None, api_url="http://localhost:1234/v1/chat/completions", api_key="lm-studio", model="local-model", temperature=0.7, max_tokens=-1, prompt_style="", context_window=4096, concurrency=1, card_density="Medium", partial_result_callback=None, stop_callback=None, filter_yes_no=True, exclude_trivia=True, smart_deck_match=True, ai_refinement=False):
     """
     Generates Q&A pairs from the given text using a Local LLM.
@@ -340,168 +519,30 @@ def generate_qa_pairs(text, deck_names=[], target_language="English", log_callba
     if log_callback:
         log_callback(f"Document split into {len(chunks)} parts in {split_duration:.2f}s.")
 
-    def filter_and_process_cards(raw_data_list):
-        """Helper to clean, filter, and assign decks to a list of raw card objects."""
-        
-        # Helper to score a deck against text based on keywords
-        def score_deck(d_name, q_txt, a_txt):
-            # Split by comma to get sub-topics (e.g. "Temel Bilgiler, Anamnez")
-            parts = [p.strip().lower() for p in d_name.split(',')]
-            score = 0
-            for part in parts:
-                if not part: continue
-                
-                # 1. Full phrase match (Highest priority in Question)
-                if part in q_txt:
-                    score += len(part) * 3
-                elif part in a_txt:
-                    score += len(part) * 1  # Lower weight for answer (avoids "Epilepsy" deck for "Tumor causes epilepsy")
-                
-                else:
-                    # 2. Word match (lower weight) to catch "Muayene" in "Nörolojik Muayene"
-                    words = part.split()
-                    for w in words:
-                        if len(w) > 3:
-                            if w in q_txt: score += len(w) * 1.5
-                            elif w in a_txt: score += len(w) * 0.5
-            return score
-
-        processed_entries = [] # Stores {'card': card_dict, 'score': match_score}
-        for item in raw_data_list:
-            if not isinstance(item, dict) or 'question' not in item or 'answer' not in item:
-                continue
-            
-            # Robustly handle question/answer fields
-            q_val = item['question']
-            q_text = " ".join(str(x) for x in q_val).strip() if isinstance(q_val, list) else str(q_val).strip()
-
-            a_val = item['answer']
-            a_text = " ".join(str(x) for x in a_val).strip() if isinstance(a_val, list) else str(a_val).strip()
-            
-            # Filter: Strictly remove Yes/No answers
-            if filter_yes_no:
-                a_lower = a_text.lower().strip()
-                if a_lower in ['evet', 'evet.', 'hayır', 'hayır.', 'yes', 'yes.', 'no', 'no.']:
-                    continue
-                if a_lower.startswith(('evet,', 'hayır,', 'yes,', 'no,')):
-                    continue
-            
-            deck = item.get('deck', 'Default')
-            quote = item.get('quote', '')
-            
-            current_score = 0
-            
-            # Enforce deck constraints if provided
-            if deck_names and deck not in deck_names:
-                # 1. Case insensitive match
-                match = next((d for d in deck_names if d.lower() == deck.lower()), None)
-                if match: deck = match
-                else:
-                    # 2. Substring match
-                    match = next((d for d in deck_names if d in deck), None)
-                    if match: deck = match
-                    else:
-                        # 3. Fallback
-                        deck = "Default" if "Default" in deck_names else (deck_names[0] if deck_names else "Default")
-            
-            # 4. Smart Content-Based Correction
-            if smart_deck_match and deck_names:
-                q_lower = q_text.lower()
-                a_lower = a_text.lower()
-                
-                current_score = score_deck(deck, q_lower, a_lower)
-                best_match = max(deck_names, key=lambda d: score_deck(d, q_lower, a_lower)) if deck_names else None
-                
-                # Only switch if the new match is significantly better (score > 0 and better than current)
-                if best_match and score_deck(best_match, q_lower, a_lower) > current_score:
-                    deck = best_match
-                    current_score = score_deck(best_match, q_lower, a_lower)
-            
-            processed_entries.append({'card': {'question': q_text, 'answer': a_text, 'deck': deck, 'quote': quote}, 'score': current_score})
-
-        # 5. Contextual Deck Correction (Majority Vote)
-        # If a card has a weak match (score 0), reassign it to the dominant deck of the chunk.
-        if smart_deck_match and processed_entries:
-            # Find dominant deck from high-confidence cards (score > 0)
-            high_conf_decks = [e['card']['deck'] for e in processed_entries if e['score'] > 0]
-            
-            dominant_deck = None
-            if high_conf_decks:
-                dominant_deck = Counter(high_conf_decks).most_common(1)[0][0]
-            elif processed_entries:
-                # Fallback: Simple majority of all cards if no keywords matched anywhere
-                all_decks = [e['card']['deck'] for e in processed_entries]
-                dominant_deck = Counter(all_decks).most_common(1)[0][0]
-            
-            if dominant_deck:
-                for entry in processed_entries:
-                    if entry['score'] == 0:
-                        entry['card']['deck'] = dominant_deck
-
-        return [e['card'] for e in processed_entries]
-
-    def process_chunk_task(i, chunk):
-        """Helper function to process a single chunk in a thread."""
-        if stop_callback and stop_callback():
-            return []
-            
-        if log_callback:
-            log_callback(f"Processing part {i+1}/{len(chunks)}... (Sending to AI)")
-            
-        chunk_start = time.time()
-        user_prompt = f"Generate flashcards from the following text:\n\n{chunk}"
-
-        # Dynamic Max Tokens Logic to prevent infinite loops/context shifts
-        request_max_tokens = max_tokens
-        if request_max_tokens <= 0:
-            # Estimate prompt tokens (conservative)
-            est_prompt_tokens = (len(user_prompt) + len(system_prompt)) / 2.5 
-            # Cap at 4000 to allow for high-density generation on larger contexts.
-            request_max_tokens = 4000
-            
-            # Ensure we don't exceed context window
-            if est_prompt_tokens + request_max_tokens > context_window:
-                request_max_tokens = int(context_window - est_prompt_tokens - 100)
-            
-            if request_max_tokens < 500: request_max_tokens = 500
-        
-        chunk_cards = []
-        try:
-            response_text = call_lm_studio(user_prompt, system_prompt, api_url=api_url, api_key=api_key, model=model, temperature=temperature, max_tokens=request_max_tokens, stop_callback=stop_callback)
-            if log_callback:
-                log_callback(f"  > AI Response received for part {i+1} ({len(response_text)} chars).")
-            
-            # Use robust parsing instead of fragile JSON array parsing
-            data = robust_parse_objects(response_text)
-            
-            if not data and log_callback:
-                log_callback(f"Warning: No valid cards found in part {i+1}. Response might be malformed or empty.")
-            
-            # First Pass: Filter and Clean
-            temp_cards = filter_and_process_cards(data)
-
-            # Second Pass: AI Refinement (Optional)
-            if ai_refinement and temp_cards:
-                if log_callback:
-                    log_callback(f"  > Refining {len(temp_cards)} cards with AI (Check -> Edit)...")
-                
-                # Note: We don't pass log_callback to refinement inside thread to avoid UI race conditions, or we rely on thread-safe logging
-                refined_raw = refine_generated_cards(temp_cards, deck_names, target_language, api_url, api_key, model, temperature, log_callback, stop_callback)
-                # IMPORTANT: Re-run filter on refined cards to catch any "Yes/No" answers the AI might have re-introduced
-                chunk_cards = filter_and_process_cards(refined_raw)
-            else:
-                chunk_cards = temp_cards
-
-        except Exception as e:
-            if log_callback:
-                log_callback(f"Error processing part {i+1}: {e}")
-            return []
-            
-        return chunk_cards
-
     # Parallel Execution
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        future_to_index = {executor.submit(process_chunk_task, i, chunk): i for i, chunk in enumerate(chunks)}
+        future_to_index = {
+            executor.submit(
+                _process_chunk_task,
+                i,
+                chunk,
+                len(chunks),
+                stop_callback,
+                log_callback,
+                max_tokens,
+                system_prompt,
+                context_window,
+                api_url,
+                api_key,
+                model,
+                temperature,
+                ai_refinement,
+                deck_names,
+                target_language,
+                filter_yes_no,
+                smart_deck_match
+            ): i for i, chunk in enumerate(chunks)
+        }
         
         for future in as_completed(future_to_index):
             if stop_callback and stop_callback():
