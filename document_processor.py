@@ -77,7 +77,7 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
     last_exception = None
 
     for attempt in range(retries):
-        full_response = ""
+        response_parts = []
         try:
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 if response.status != 200:
@@ -98,11 +98,11 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
                                 delta = data_json['choices'][0].get('delta', {})
                                 content = delta.get('content', '')
                                 if content:
-                                    full_response += content
+                                    response_parts.append(content)
                         except:
                             pass
 
-            return full_response
+            return "".join(response_parts)
 
         except urllib.error.URLError as e:
             last_exception = ConnectionError(f"Could not connect to AI Server at {api_url}. Ensure the server is running. Details: {e}")
@@ -296,6 +296,9 @@ def filter_and_process_cards(raw_data_list, deck_names, smart_deck_match, filter
     # Pre-process deck names if smart matching is enabled
     # Optimization: Pre-compute string splits (O(N) setup) to avoid repeated O(N*M) string operations inside the loop.
     processed_decks = []
+    processed_decks_map = {} # Lookup map for fast access
+    deck_lower_map = {d.lower(): d for d in deck_names} if deck_names else {}
+
     if smart_deck_match and deck_names:
         for d_name in deck_names:
             parts = [p.strip().lower() for p in d_name.split(',')]
@@ -305,6 +308,7 @@ def filter_and_process_cards(raw_data_list, deck_names, smart_deck_match, filter
                 words = [w for w in part.split() if len(w) > 3]
                 parts_data.append({'text': part, 'words': words})
             processed_decks.append({'name': d_name, 'parts': parts_data})
+            processed_decks_map[d_name] = parts_data
 
     processed_entries = [] # Stores {'card': card_dict, 'score': match_score}
     for item in raw_data_list:
@@ -336,8 +340,8 @@ def filter_and_process_cards(raw_data_list, deck_names, smart_deck_match, filter
 
         # Enforce deck constraints if provided
         if deck_names and deck not in deck_names:
-            # 1. Case insensitive match
-            match = next((d for d in deck_names if d.lower() == deck.lower()), None)
+            # 1. Case insensitive match (optimized with lookup map)
+            match = deck_lower_map.get(deck.lower())
             if match: deck = match
             else:
                 # 2. Substring match
@@ -352,8 +356,11 @@ def filter_and_process_cards(raw_data_list, deck_names, smart_deck_match, filter
             q_lower = q_text.lower()
             a_lower = a_text.lower()
 
-            # Calculate score for the currently assigned deck (on-the-fly)
-            current_score = score_deck_raw(deck, q_lower, a_lower)
+            # Calculate score for the currently assigned deck (optimized using lookup map)
+            if deck in processed_decks_map:
+                current_score = score_deck_parts(processed_decks_map[deck], q_lower, a_lower)
+            else:
+                current_score = score_deck_raw(deck, q_lower, a_lower)
 
             # Find best match from processed decks (optimized loop)
             best_match_deck = None
