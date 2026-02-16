@@ -8,10 +8,36 @@ import threading
 import os
 import time
 import json
+import logging
 from document_processor import extract_text_from_pdf, generate_qa_pairs
 from anki_integration import create_anki_deck, get_deck_names
 
 CONFIG_FILE = "config.json"
+
+class TextWidgetHandler(logging.Handler):
+    """Custom logging handler that writes to a Tkinter ScrolledText widget thread-safely."""
+    def __init__(self, text_widget, root):
+        super().__init__()
+        self.text_widget = text_widget
+        self.root = root
+
+    def emit(self, record):
+        msg = self.format(record)
+        self.root.after(0, self.append_log, msg)
+
+    def append_log(self, msg):
+        try:
+            self.text_widget.config(state='normal')
+            self.text_widget.insert("end", msg + "\n")
+            # Limit to approx 50000 characters
+            text = self.text_widget.get("1.0", "end")
+            if len(text) > 50000:
+                excess = len(text) - 50000
+                self.text_widget.delete("1.0", f"1.0+{excess}c")
+            self.text_widget.see("end")
+            self.text_widget.config(state='disabled')
+        except Exception:
+            pass
 
 class CardReviewRow(ttk.Frame):
     """A row representing a single generated card for review."""
@@ -107,11 +133,30 @@ class AnkiGeneratorUI(ttk.Window):
         self.notebook.add(self.settings_tab, text="Settings")
         
         self.setup_main_tab()
+        self.setup_logging()
         self.setup_settings_tab()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
         # Initial Fetch
         self.fetch_decks()
+
+    def setup_logging(self):
+        self.logger = logging.getLogger("NeuralDeck")
+        self.logger.setLevel(logging.INFO)
+        # Prevent adding handlers multiple times if re-initialized
+        if not self.logger.handlers:
+            # File Handler
+            try:
+                file_handler = logging.FileHandler("session.log", encoding="utf-8")
+                file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="[%Y-%m-%d %H:%M:%S]"))
+                self.logger.addHandler(file_handler)
+            except Exception:
+                pass
+
+            # UI Handler
+            text_handler = TextWidgetHandler(self.log_area, self)
+            text_handler.setFormatter(logging.Formatter("%(message)s"))
+            self.logger.addHandler(text_handler)
 
     def setup_main_tab(self):
         self.main_tab.columnconfigure(0, weight=1)
@@ -344,17 +389,24 @@ class AnkiGeneratorUI(ttk.Window):
         self.style.theme_use(t)
 
     def fetch_decks(self):
-        self.log("Connecting to Anki...")
+        # We need logger initialized before using it. setup_main_tab creates log_area, which is needed for setup_logging.
+        # So setup_logging is called after setup_main_tab in __init__.
+        # This function is called last in __init__, so self.logger should be ready.
+        if hasattr(self, 'logger'):
+            self.logger.info("Connecting to Anki...")
         threading.Thread(target=self._fetch_decks_thread).start()
 
     def _fetch_decks_thread(self):
-        decks = get_deck_names(log_callback=self.log)
+        # Fallback if logger not ready (shouldn't happen)
+        log_cb = self.logger.info if hasattr(self, 'logger') else print
+
+        decks = get_deck_names(log_callback=log_cb)
         if decks:
             self.available_decks = decks
-            self.log(f"Connected to Anki. Found {len(decks)} decks.")
+            log_cb(f"Connected to Anki. Found {len(decks)} decks.")
         else:
             self.available_decks = ["Default"]
-            self.log("Could not connect to Anki Add-on. Is Anki open?")
+            log_cb("Could not connect to Anki Add-on. Is Anki open?")
         
         self.after(0, self.update_deck_list_ui)
 
@@ -407,29 +459,6 @@ class AnkiGeneratorUI(ttk.Window):
             self.emoji_label.config(text="📄")
             ToolTip(self.file_label, text=filename)
 
-    def log(self, message):
-        self.after(0, self._append_log, message)
-
-    def _append_log(self, message):
-        # File logging
-        try:
-            with open("session.log", "a", encoding="utf-8") as f:
-                timestamp = time.strftime("[%Y-%m-%d %H:%M:%S]")
-                f.write(f"{timestamp} {message}\n")
-        except Exception:
-            pass
-
-        # UI logging
-        self.log_area.config(state='normal')
-        self.log_area.insert("end", message + "\n")
-        # Limit to approx 50000 characters
-        text = self.log_area.get("1.0", "end")
-        if len(text) > 50000:
-            excess = len(text) - 50000
-            self.log_area.delete("1.0", f"1.0+{excess}c")
-        self.log_area.see("end")
-        self.log_area.config(state='disabled')
-
     def start_processing(self):
         if not self.selected_file_path:
             messagebox.showwarning("Warning", "Please select a PDF file first.")
@@ -459,26 +488,26 @@ class AnkiGeneratorUI(ttk.Window):
         
         # If no specific decks are selected, let AI choose from ALL available decks
         if not selected_decks:
-            self.log("No specific decks selected. AI will choose from all available decks.")
+            self.logger.info("No specific decks selected. AI will choose from all available decks.")
             selected_decks = self.available_decks
         
         self.generate_btn.config(state="disabled")
         self.stop_btn.config(state="normal")
         self.stop_requested = False
-        self.log("Starting processing...")
+        self.logger.info("Starting processing...")
         
         threading.Thread(target=self.run_process, args=(self.selected_file_path, target_lang, api_url, api_key, model, temperature, max_tokens, prompt_style, selected_decks, context_window, concurrency, card_density, filter_yes_no, exclude_trivia, smart_deck_match, ai_refinement), daemon=True).start()
 
     def run_process(self, file_path, target_lang, api_url, api_key, model, temperature, max_tokens, prompt_style, deck_names, context_window, concurrency, card_density, filter_yes_no, exclude_trivia, smart_deck_match, ai_refinement):
         try:
-            self.log(f"Extracting text from {os.path.basename(file_path)}...")
+            self.logger.info(f"Extracting text from {os.path.basename(file_path)}...")
             text = extract_text_from_pdf(file_path)
             
-            self.log(f"Extracted {len(text)} characters.")
+            self.logger.info(f"Extracted {len(text)} characters.")
             
             self.source_text = text
             
-            self.log("Generating Q&A with LLM...")
+            self.logger.info("Generating Q&A with LLM...")
             
             # Clear existing cards before starting
             self.after(0, self.clear_review_area)
@@ -490,16 +519,16 @@ class AnkiGeneratorUI(ttk.Window):
                 self.after(0, lambda: self.append_cards_to_review(cards_copy))
 
             # Pass available decks so LLM can categorize
-            qa_data = generate_qa_pairs(text, deck_names=deck_names, target_language=target_lang, log_callback=self.log, api_url=api_url, api_key=api_key, model=model, temperature=temperature, max_tokens=max_tokens, prompt_style=prompt_style, context_window=context_window, concurrency=concurrency, card_density=card_density, partial_result_callback=on_chunk_generated, stop_callback=lambda: self.stop_requested, filter_yes_no=filter_yes_no, exclude_trivia=exclude_trivia, smart_deck_match=smart_deck_match, ai_refinement=ai_refinement)
+            qa_data = generate_qa_pairs(text, deck_names=deck_names, target_language=target_lang, log_callback=self.logger.info, api_url=api_url, api_key=api_key, model=model, temperature=temperature, max_tokens=max_tokens, prompt_style=prompt_style, context_window=context_window, concurrency=concurrency, card_density=card_density, partial_result_callback=on_chunk_generated, stop_callback=lambda: self.stop_requested, filter_yes_no=filter_yes_no, exclude_trivia=exclude_trivia, smart_deck_match=smart_deck_match, ai_refinement=ai_refinement)
             
             # Final log
-            self.after(0, lambda: self.log(f"Generation complete. Total {len(qa_data)} cards. Please review and approve."))
+            self.after(0, lambda: self.logger.info(f"Generation complete. Total {len(qa_data)} cards. Please review and approve."))
 
         except FileNotFoundError as fnf:
-             self.log(f"Error: File not found. {fnf}")
+             self.logger.error(f"Error: File not found. {fnf}")
              self.after(0, lambda: messagebox.showerror("Error", f"File not found:\n{fnf}"))
         except Exception as e:
-            self.log(f"Critical Error: {str(e)}")
+            self.logger.error(f"Critical Error: {str(e)}")
             # Show popup for errors to ensure user sees it
             self.after(0, lambda: messagebox.showerror("Error", f"Processing Failed:\n{str(e)}"))
         finally:
@@ -512,7 +541,7 @@ class AnkiGeneratorUI(ttk.Window):
         self.card_rows = []
 
     def append_cards_to_review(self, new_cards):
-        self.log(f"UI: Appending {len(new_cards)} new cards...")
+        self.logger.info(f"UI: Appending {len(new_cards)} new cards...")
         for item in new_cards:
             row = CardReviewRow(
                 self.review_frame, 
@@ -540,7 +569,7 @@ class AnkiGeneratorUI(ttk.Window):
     def stop_processing(self):
         if messagebox.askyesno("Stop", "Are you sure you want to stop processing?"):
             self.stop_requested = True
-            self.log("Stopping processing...")
+            self.logger.info("Stopping processing...")
             self.stop_btn.config(state="disabled")
 
     def on_close(self):
@@ -583,10 +612,10 @@ class AnkiGeneratorUI(ttk.Window):
         total_added = 0
         try:
             for deck_name, pairs in deck_groups.items():
-                count = create_anki_deck(deck_name, pairs, log_callback=self.log)
+                count = create_anki_deck(deck_name, pairs, log_callback=self.logger.info)
                 total_added += count
             
             messagebox.showinfo("Success", f"Successfully added {total_added} cards to Anki!")
-            self.log(f"Synced {total_added} cards.")
+            self.logger.info(f"Synced {total_added} cards.")
         except Exception as e:
             messagebox.showerror("Error", str(e))

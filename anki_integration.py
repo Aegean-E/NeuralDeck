@@ -50,18 +50,24 @@ def create_anki_deck(deck_name, qa_pairs, log_callback=None):
             return count
     except urllib.error.HTTPError as e:
         # Read the error message from the server
-        error_body = e.read().decode('utf-8')
+        try:
+            error_body = e.read().decode('utf-8')
+        except Exception:
+            error_body = ""
+
         try:
             error_json = json.loads(error_body)
-            error_msg = error_json.get("message", error_body)
+            # Some APIs return 'error' key instead of 'message'
+            error_msg = error_json.get("message") or error_json.get("error") or error_body
             if "traceback" in error_json:
                 error_msg += f"\nTraceback:\n{error_json['traceback']}"
-        except:
-            error_msg = error_body
+        except Exception:
+            error_msg = error_body or str(e)
             
+        full_msg = f"Anki Server Error ({e.code}): {error_msg}"
         if log_callback:
-            log_callback(f"Anki Server Error (500): {error_msg}")
-        raise Exception(f"Anki Server Error: {error_msg}")
+            log_callback(full_msg)
+        raise Exception(full_msg)
     except urllib.error.URLError as e:
         if log_callback:
             log_callback(f"Connection Error: {e}")

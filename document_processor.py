@@ -1,6 +1,7 @@
 import json
 import random
 import time
+import os
 import re
 import urllib.request
 import urllib.error
@@ -21,6 +22,9 @@ def extract_text_from_pdf(file_path):
         raise ImportError("PyPDF2 module not found. Please install it in the add-on 'libs' folder.")
         
     text_parts = []
+    empty_pages = []
+    total_pages = 0
+
     try:
         with open(file_path, 'rb') as file:
             reader = PyPDF2.PdfReader(file)
@@ -36,16 +40,24 @@ def extract_text_from_pdf(file_path):
             if not reader.pages:
                 raise Exception("PDF appears to be empty or corrupted (0 pages found).")
 
+            total_pages = len(reader.pages)
             for i, page in enumerate(reader.pages):
                 try:
                     extracted = page.extract_text()
-                    if extracted:
+                    if extracted and extracted.strip():
                         # Append parts to list for O(N) performance instead of O(N^2) string concatenation
                         text_parts.append(extracted)
                         text_parts.append("\n")
+                    else:
+                        empty_pages.append(i + 1)
+                        # Add placeholder for layout preservation context
+                        text_parts.append(f"\n[PAGE {i+1}: NO TEXT DETECTED - SCANNED?]\n")
+                        print(f"Warning: Page {i+1} yielded no text (likely scanned or image).")
+
                 except Exception as page_error:
                     # Log warning for specific page failure but continue
                     print(f"Warning: Failed to extract text from page {i+1}: {page_error}")
+                    empty_pages.append(i + 1)
                     continue
 
     except FileNotFoundError:
@@ -55,8 +67,9 @@ def extract_text_from_pdf(file_path):
 
     full_text = "".join(text_parts)
 
-    if not full_text.strip():
-        raise Exception("No text could be extracted from this PDF. It might be a scanned image, encrypted, or corrupted. Please use an OCR tool first.")
+    # If all pages were empty (and we only have placeholders)
+    if len(empty_pages) == total_pages:
+        raise Exception("No text could be extracted from this PDF. It appears to be entirely scanned images or encrypted. Please use an external OCR tool first.")
 
     return full_text
 
@@ -123,7 +136,11 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
                                 content = delta.get('content', '')
                                 if content:
                                     full_response += content
-                        except:
+                        except json.JSONDecodeError:
+                            # Log or ignore bad JSON chunks
+                            continue
+                        except Exception:
+                            # Ignore other minor parsing errors
                             pass
 
             # If we got a response but it's empty, that might be an error too (or just empty completion)
@@ -647,6 +664,17 @@ def generate_qa_pairs(text, deck_names=[], target_language="English", log_callba
     
     if log_callback:
         log_callback(f"Document split into {len(chunks)} parts in {split_duration:.2f}s.")
+
+    # Safety: Limit concurrency based on system resources
+    cpu_count = os.cpu_count() or 1
+    # Cap concurrency to avoid system overload (especially memory)
+    # Use max(1, cpu_count) just in case
+    max_safe_workers = max(1, cpu_count)
+
+    if concurrency > max_safe_workers:
+        if log_callback:
+            log_callback(f"Warning: Requested concurrency ({concurrency}) exceeds logical CPU count ({max_safe_workers}). Limiting to {max_safe_workers}.")
+        concurrency = max_safe_workers
 
     # Parallel Execution
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
