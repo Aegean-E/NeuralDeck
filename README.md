@@ -47,6 +47,8 @@ To allow the app to communicate with Anki, you must install the included bridge 
 4. Copy the contents of the `anki_addon` folder (`__init__.py` and `manifest.json`) from this project into that new folder.
 5. **Restart Anki**. You should see a notification that the "Anki Bridge" is running on port 5005.
 
+**Note:** The add-on is compatible with both modern Anki (2.1.50+) and older versions.
+
 ## Usage
 
 1. **Start your Local LLM**: Open LM Studio, load a model (e.g., `Meta-Llama-3-8B-Instruct`), and start the Local Server.

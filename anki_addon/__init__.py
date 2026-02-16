@@ -129,14 +129,22 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
             model['flds'] = []
             model['tmpls'] = []
             
-            # 2. Create fields using helper
-            f1 = col.models.new_field("Question")
-            f2 = col.models.new_field("Answer")
+            # 2. Create fields using helper (support both snake_case and camelCase)
+            new_field = getattr(col.models, 'new_field', getattr(col.models, 'newField', None))
+            if not new_field:
+                raise Exception("Could not find 'new_field' or 'newField' method in Anki collection.")
+
+            f1 = new_field("Question")
+            f2 = new_field("Answer")
             model['flds'].append(f1)
             model['flds'].append(f2)
             
             # 3. Create template using helper
-            t = col.models.new_template("Card 1")
+            new_template = getattr(col.models, 'new_template', getattr(col.models, 'newTemplate', None))
+            if not new_template:
+                raise Exception("Could not find 'new_template' or 'newTemplate' method in Anki collection.")
+
+            t = new_template("Card 1")
             t['qfmt'] = '{{Question}}'
             t['afmt'] = '{{FrontSide}}<hr id="answer">{{Answer}}'
             model['tmpls'].append(t)
@@ -151,7 +159,12 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
         # 3. Add Notes
         count = 0
         for card in cards:
-            note = Note(col, model)
+            # Instantiate Note safely
+            try:
+                note = Note(col, model)
+            except TypeError:
+                # Newer Anki versions might require keyword arguments
+                note = Note(col=col, model=model)
             
             # Smart field mapping: Use 'Question'/'Answer' if they exist, otherwise use 1st/2nd fields
             field_names = [f['name'] for f in model['flds']]
@@ -171,8 +184,10 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
             # Compatibility for different Anki versions
             if hasattr(col, 'add_note'):
                 col.add_note(note, deck_id)
-            else:
+            elif hasattr(col, 'addNote'):
                 col.addNote(note) # Legacy support
+            else:
+                 raise Exception("Could not find add_note or addNote method in Anki collection.")
             count += 1
             
         col.save()
