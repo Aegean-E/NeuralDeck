@@ -3,6 +3,7 @@ import threading
 import os
 import base64
 import traceback
+import urllib.parse
 from concurrent.futures import Future
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from aqt import mw
@@ -23,9 +24,23 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
         # Silence logging to avoid Anki stderr capture
         return
 
+    def send_cors_headers(self):
+        origin = self.headers.get('Origin')
+        if origin:
+            # Security Fix: Only allow localhost origins to interact with the Anki Bridge.
+            # We parse the URL to ensure the hostname is exactly localhost or 127.0.0.1,
+            # preventing bypasses like http://localhost.evil.com.
+            try:
+                parsed = urllib.parse.urlparse(origin)
+                if parsed.hostname in ('localhost', '127.0.0.1', '::1'):
+                    self.send_header('Access-Control-Allow-Origin', origin)
+                    self.send_header('Vary', 'Origin')
+            except Exception:
+                pass
+
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_cors_headers()
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
@@ -44,7 +59,7 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
                 decks = future.result()
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"decks": decks}).encode('utf-8'))
             except Exception as e:
@@ -75,7 +90,7 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
                 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"status": "success", "count": count}).encode('utf-8'))
             except Exception as e:
