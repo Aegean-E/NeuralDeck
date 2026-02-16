@@ -3,6 +3,7 @@ import threading
 import os
 import base64
 import traceback
+import urllib.parse
 from concurrent.futures import Future
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from aqt import mw
@@ -23,9 +24,18 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
         # Silence logging to avoid Anki stderr capture
         return
 
+    def _set_cors_headers(self):
+        origin = self.headers.get('Origin', '')
+        parsed = urllib.parse.urlparse(origin)
+        if parsed.hostname in ['localhost', '127.0.0.1', '::1']:
+            self.send_header('Access-Control-Allow-Origin', origin)
+        else:
+            # Fallback or deny
+            self.send_header('Access-Control-Allow-Origin', 'null')
+
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self._set_cors_headers()
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
@@ -37,14 +47,19 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
                 future = Future()
                 def get_decks_task():
                     try:
-                        future.set_result(mw.col.decks.allNames())
+                        # Compatibility for older/newer Anki versions
+                        if hasattr(mw.col.decks, 'all_names_and_ids'):
+                             decks = [d.name for d in mw.col.decks.all_names_and_ids()]
+                        else:
+                             decks = mw.col.decks.allNames()
+                        future.set_result(decks)
                     except Exception as e:
                         future.set_exception(e)
                 mw.taskman.run_on_main(get_decks_task)
                 decks = future.result()
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self._set_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"decks": decks}).encode('utf-8'))
             except Exception as e:
@@ -75,7 +90,7 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
                 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
+                self._set_cors_headers()
                 self.end_headers()
                 self.wfile.write(json.dumps({"status": "success", "count": count}).encode('utf-8'))
             except Exception as e:
@@ -119,7 +134,12 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
         deck_id = col.decks.id(deck_name)
         
         # 2. Get/Create Model
-        model = col.models.by_name(model_name)
+        model = None
+        if hasattr(col.models, 'by_name'):
+            model = col.models.by_name(model_name)
+        elif hasattr(col.models, 'byName'):
+            model = col.models.byName(model_name)
+
         if not model:
             model = col.models.new(model_name)
             

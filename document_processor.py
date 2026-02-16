@@ -22,7 +22,7 @@ def extract_text_from_pdf(file_path, log_callback=None):
     Extracts text from a PDF file.
     """
     if PyPDF2 is None:
-        raise ImportError("PyPDF2 module not found. Please install it in the add-on 'libs' folder.")
+        raise ImportError("PyPDF2 module not found. Please install it using 'pip install PyPDF2'.")
         
     text_parts = []
     empty_pages = []
@@ -335,9 +335,10 @@ def robust_parse_objects(text):
 
             pos = end_idx
         except json.JSONDecodeError:
-            # If decoding fails (e.g. truncated object or syntax error inside),
-            # advance past this '{' to try finding the next one.
-            pos = start_idx + 1
+            # Optimization: If decoding fails, skip to next '{' instead of iterating char by char
+            pos = text.find('{', start_idx + 1)
+            if pos == -1:
+                break
             
     return results
 
