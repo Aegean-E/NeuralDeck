@@ -10,6 +10,8 @@ import http.client
 import socket
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pipeline_utils import PipelineStats, FailureLogger, CardValidator, ResourceGuard
+
 try:
     import PyPDF2
 except ImportError:
@@ -203,11 +205,12 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
         raise last_exception
     raise Exception("Unknown error occurred during API call (Retries exhausted).")
 
-def smart_chunk_text(text, max_chars):
+def smart_chunk_text(text, max_chars, min_chars=100):
     """
     Splits text into chunks respecting paragraph boundaries.
     If a single paragraph exceeds max_chars, it splits by sentences.
     If a single sentence exceeds max_chars, it hard splits.
+    Also attempts to merge very small chunks with neighbors.
     """
     chunks = []
     current_chunk = []
@@ -271,8 +274,32 @@ def smart_chunk_text(text, max_chars):
 
     if current_chunk:
         chunks.append("".join(current_chunk))
+
+    # Post-processing: Merge small chunks
+    final_chunks = []
+    for chunk in chunks:
+        if not final_chunks:
+            final_chunks.append(chunk)
+            continue
         
-    return chunks
+        last = final_chunks[-1]
+
+        # If current chunk is too small, try to merge with previous
+        if len(chunk) < min_chars:
+            if len(last) + len(chunk) <= max_chars:
+                final_chunks[-1] += chunk
+            else:
+                final_chunks.append(chunk)
+        # If previous chunk was too small, try to merge current into it
+        elif len(last) < min_chars:
+            if len(last) + len(chunk) <= max_chars:
+                final_chunks[-1] += chunk
+            else:
+                final_chunks.append(chunk)
+        else:
+            final_chunks.append(chunk)
+
+    return final_chunks
 
 def robust_parse_objects(text):
     """
@@ -556,7 +583,7 @@ def filter_and_process_cards(raw_data_list, deck_names, smart_deck_match, filter
 
     return [e['card'] for e in processed_entries]
 
-def _process_chunk_task(i, chunk, total_chunks, stop_callback, log_callback, max_tokens, system_prompt, context_window, api_url, api_key, model, temperature, ai_refinement, deck_names, target_language, filter_yes_no, smart_deck_match):
+def _process_chunk_task(i, chunk, total_chunks, stop_callback, log_callback, max_tokens, system_prompt, context_window, api_url, api_key, model, temperature, ai_refinement, deck_names, target_language, filter_yes_no, smart_deck_match, pipeline_stats=None, failure_logger=None):
     """Helper function to process a single chunk in a thread."""
     if stop_callback and stop_callback():
         return []
@@ -582,6 +609,7 @@ def _process_chunk_task(i, chunk, total_chunks, stop_callback, log_callback, max
         if request_max_tokens < 500: request_max_tokens = 500
 
     chunk_cards = []
+    error_occurred = None
     try:
         response_text = call_lm_studio(user_prompt, system_prompt, api_url=api_url, api_key=api_key, model=model, temperature=temperature, max_tokens=request_max_tokens, stop_callback=stop_callback)
         if log_callback:
@@ -609,16 +637,55 @@ def _process_chunk_task(i, chunk, total_chunks, stop_callback, log_callback, max
             chunk_cards = temp_cards
 
     except Exception as e:
+        error_occurred = e
         if log_callback:
             log_callback(f"Error processing part {i+1}: {e}")
+        # Log failure if pipeline_stats is available, but better to log in FailureLogger which is usually global or passed.
+        # But we don't have global access. We'll rely on the caller or a new FailureLogger here.
+        # Ideally, main thread handles logging.
+        # Just return empty.
+
+    duration = time.time() - chunk_start
+    if pipeline_stats:
+        pipeline_stats.add_llm_time(duration)
+        if error_occurred:
+            pipeline_stats.increment_failed_chunk()
+            # We can also log to file if we instantiate FailureLogger here or pass it.
+            # Since we didn't pass FailureLogger, we can't easily log to file here without creating new instance or passing it.
+            # But let's assume we update stats.
+        else:
+            pipeline_stats.increment_processed_chunk()
+
+    if error_occurred:
+        # Re-raise or return empty?
+        # Failure isolation: Return empty, let main loop handle logging if it can.
+        # But we want to log the specific error.
+        # We'll return a special marker or just empty list.
+        # If we return empty list, we lose the error detail for the failure log.
+        # Let's attach error to the list? No.
+        # Let's rely on logging callback for now, or instantiate FailureLogger here.
+        if failure_logger:
+            failure_logger.log_failed_chunk(i+1, chunk, error_occurred)
+        else:
+            FailureLogger().log_failed_chunk(i+1, chunk, error_occurred)
         return []
 
     return chunk_cards
 
-def generate_qa_pairs(text, deck_names=[], target_language="English", log_callback=None, api_url="http://localhost:1234/v1/chat/completions", api_key="lm-studio", model="local-model", temperature=0.7, max_tokens=-1, prompt_style="", context_window=4096, concurrency=1, card_density="Medium", partial_result_callback=None, stop_callback=None, filter_yes_no=True, exclude_trivia=True, smart_deck_match=True, ai_refinement=False):
+def generate_qa_pairs(text, deck_names=[], target_language="English", log_callback=None, api_url="http://localhost:1234/v1/chat/completions", api_key="lm-studio", model="local-model", temperature=0.7, max_tokens=-1, prompt_style="", context_window=4096, concurrency=1, card_density="Medium", partial_result_callback=None, stop_callback=None, filter_yes_no=True, exclude_trivia=True, smart_deck_match=True, ai_refinement=False, deterministic_mode=False, pipeline_stats=None):
     """
     Generates Q&A pairs from the given text using a Local LLM.
     """
+    if not pipeline_stats:
+        pipeline_stats = PipelineStats()
+
+    failure_logger = FailureLogger()
+
+    if deterministic_mode:
+        random.seed(42) # Fixed seed for reproducibility
+        if log_callback:
+            log_callback("Deterministic Mode Enabled: Random seed set to 42, concurrency set to 1, deck shuffling disabled.")
+
     if log_callback:
         log_callback(f"Sending text to LM Studio for Q&A generation in {target_language}...")
 
@@ -632,8 +699,8 @@ def generate_qa_pairs(text, deck_names=[], target_language="English", log_callba
     
     if deck_names:
         target_decks = list(deck_names)
-        if smart_deck_match:
-            # Shuffle decks to prevent LLM from lazily picking the first one (e.g. "Baş Ağrısı")
+        if smart_deck_match and not deterministic_mode:
+            # Shuffle decks to prevent LLM from lazily picking the first one
             random.shuffle(target_decks)
             
         deck_instruction = f"You must assign each card to one of the following existing decks: {json.dumps(target_decks)}. Do NOT create new deck names. Analyze the card content carefully and select the deck that matches the specific disease or topic (e.g., if card is about Dementia, select 'Demans')."
@@ -713,6 +780,11 @@ def generate_qa_pairs(text, deck_names=[], target_language="English", log_callba
     chunks = smart_chunk_text(text, CHUNK_SIZE)
     split_duration = time.time() - start_split
 
+    pipeline_stats.record_chunking_time(split_duration)
+    # Update total chunks count in stats
+    for _ in chunks: pipeline_stats.increment_chunk_count()
+    ResourceGuard.check_chunk_count(len(chunks))
+
     all_qa_pairs = []
     seen_questions_global = set()
     
@@ -730,8 +802,16 @@ def generate_qa_pairs(text, deck_names=[], target_language="English", log_callba
             log_callback(f"Warning: Requested concurrency ({concurrency}) exceeds logical CPU count ({max_safe_workers}). Limiting to {max_safe_workers}.")
         concurrency = max_safe_workers
 
+    # Enforce Determinism: Force concurrency=1
+    if deterministic_mode:
+        concurrency = 1
+
     # Parallel Execution
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        # If deterministic, we must process in order.
+        # But we also want to stream results.
+        # We can still use submit, but we must collect results in order.
+
         future_to_index = {
             executor.submit(
                 _process_chunk_task,
@@ -751,10 +831,21 @@ def generate_qa_pairs(text, deck_names=[], target_language="English", log_callba
                 deck_names,
                 target_language,
                 filter_yes_no,
-                smart_deck_match
+                smart_deck_match,
+                pipeline_stats,
+                failure_logger
             ): i for i, chunk in enumerate(chunks)
         }
         
+        # Iterate over futures as they complete or in order?
+        # as_completed yields out of order.
+        # If deterministic, we prefer predictable order of output in UI?
+        # Actually, if we just want the final list to be deterministic, we can collect all results and sort by index.
+        # But we also want to handle partial_result_callback.
+        # If concurrency=1, as_completed will yield in order anyway.
+        # So we can keep as_completed logic, but we need to ensure we sort at the end if we were running parallel but wanted deterministic output?
+        # Deterministic mode forces concurrency=1, so order is guaranteed.
+
         for future in as_completed(future_to_index):
             if stop_callback and stop_callback():
                 break
@@ -766,6 +857,13 @@ def generate_qa_pairs(text, deck_names=[], target_language="English", log_callba
                 # Deduplicate and Add
                 unique_new_cards = []
                 for card in new_cards:
+                    # Validate
+                    valid, reason = CardValidator.validate(card)
+                    if not valid:
+                        pipeline_stats.add_rejected_cards(1)
+                        failure_logger.log_rejected_card(card, reason)
+                        continue
+
                     q_text = card['question']
                     if q_text not in seen_questions_global:
                         seen_questions_global.add(q_text)
@@ -776,6 +874,12 @@ def generate_qa_pairs(text, deck_names=[], target_language="English", log_callba
                             quote = card.get('quote', '')
                             quote_fmt = f" | Src: {quote[:60]}..." if quote else ""
                             log_callback(f"  [+] [{card.get('deck')}] Q: {q_text} | A: {card.get('answer')}{quote_fmt}")
+                    else:
+                        # Duplicate
+                         pipeline_stats.add_rejected_cards(1)
+
+                if unique_new_cards:
+                    pipeline_stats.add_generated_cards(len(unique_new_cards))
 
                 if log_callback:
                     log_callback(f"  > Part {i+1} completed. Added {len(unique_new_cards)} cards.")
@@ -784,8 +888,12 @@ def generate_qa_pairs(text, deck_names=[], target_language="English", log_callba
                     partial_result_callback(unique_new_cards)
                     
             except Exception as e:
+                pipeline_stats.increment_failed_chunk()
                 if log_callback:
                     log_callback(f"Critical Error in thread {i}: {e}")
+
+    # Final Sort to ensure index order if parallel (for partial determinism even with parallelism, though not guaranteed across runs if race conditions exist)
+    # But for deterministic mode, we are single threaded so it's sorted.
 
     if log_callback:
         log_callback(f"Completed. Generated {len(all_qa_pairs)} total Q&A pairs.")
