@@ -11,6 +11,7 @@ import json
 import logging
 from document_processor import extract_text_from_pdf, generate_qa_pairs
 from anki_integration import create_anki_deck, get_deck_names, check_anki_connection
+from pipeline_utils import PipelineStats, ResourceGuard
 
 CONFIG_FILE = "config.json"
 
@@ -337,6 +338,10 @@ class AnkiGeneratorUI(ttk.Window):
         self.ai_refinement_var = ttk.BooleanVar(value=self.config.get("ai_refinement", False))
         ttk.Checkbutton(qc_frame, text="AI Refinement (Two-Pass: Generation -> AI Check -> Edit)", variable=self.ai_refinement_var, bootstyle="round-toggle").pack(anchor=W, pady=2)
 
+        # Deterministic Mode
+        self.deterministic_mode_var = ttk.BooleanVar(value=self.config.get("deterministic_mode", False))
+        ttk.Checkbutton(qc_frame, text="Deterministic Mode (Reproducible Output, No Parallelism)", variable=self.deterministic_mode_var, bootstyle="round-toggle").pack(anchor=W, pady=2)
+
         # Debug Mode
         self.debug_mode_var = ttk.BooleanVar(value=self.config.get("debug_mode", False))
         ttk.Checkbutton(qc_frame, text="Debug Mode (Verbose Logging)", variable=self.debug_mode_var, bootstyle="round-toggle").pack(anchor=W, pady=2)
@@ -378,6 +383,7 @@ class AnkiGeneratorUI(ttk.Window):
         self.config["exclude_trivia"] = self.exclude_trivia_var.get()
         self.config["smart_deck_match"] = self.smart_deck_match_var.get()
         self.config["ai_refinement"] = self.ai_refinement_var.get()
+        self.config["deterministic_mode"] = self.deterministic_mode_var.get()
         self.config["debug_mode"] = self.debug_mode_var.get()
         self.config["prompt_style"] = self.prompt_text.get("1.0", "end-1c")
 
@@ -493,6 +499,7 @@ class AnkiGeneratorUI(ttk.Window):
         exclude_trivia = self.exclude_trivia_var.get()
         smart_deck_match = self.smart_deck_match_var.get()
         ai_refinement = self.ai_refinement_var.get()
+        deterministic_mode = self.deterministic_mode_var.get()
         
         # Get selected decks
         selected_decks = [d for d, v in self.deck_vars.items() if v.get()]
@@ -507,12 +514,17 @@ class AnkiGeneratorUI(ttk.Window):
         self.stop_requested = False
         self.logger.info("Starting processing...")
         
-        threading.Thread(target=self.run_process, args=(self.selected_file_path, target_lang, api_url, api_key, model, temperature, max_tokens, prompt_style, selected_decks, context_window, concurrency, card_density, filter_yes_no, exclude_trivia, smart_deck_match, ai_refinement), daemon=True).start()
+        threading.Thread(target=self.run_process, args=(self.selected_file_path, target_lang, api_url, api_key, model, temperature, max_tokens, prompt_style, selected_decks, context_window, concurrency, card_density, filter_yes_no, exclude_trivia, smart_deck_match, ai_refinement, deterministic_mode), daemon=True).start()
 
-    def run_process(self, file_path, target_lang, api_url, api_key, model, temperature, max_tokens, prompt_style, deck_names, context_window, concurrency, card_density, filter_yes_no, exclude_trivia, smart_deck_match, ai_refinement):
+    def run_process(self, file_path, target_lang, api_url, api_key, model, temperature, max_tokens, prompt_style, deck_names, context_window, concurrency, card_density, filter_yes_no, exclude_trivia, smart_deck_match, ai_refinement, deterministic_mode):
+        pipeline_stats = PipelineStats()
         try:
+            ResourceGuard.check_file_size(file_path)
             self.logger.info(f"Extracting text from {os.path.basename(file_path)}...")
+
+            t_start = time.time()
             text = extract_text_from_pdf(file_path, log_callback=self.logger.info)
+            pipeline_stats.record_extraction_time(time.time() - t_start)
             
             self.logger.info(f"Extracted {len(text)} characters.")
             
@@ -530,8 +542,12 @@ class AnkiGeneratorUI(ttk.Window):
                 self.after(0, lambda: self.append_cards_to_review(cards_copy))
 
             # Pass available decks so LLM can categorize
-            qa_data = generate_qa_pairs(text, deck_names=deck_names, target_language=target_lang, log_callback=self.logger.info, api_url=api_url, api_key=api_key, model=model, temperature=temperature, max_tokens=max_tokens, prompt_style=prompt_style, context_window=context_window, concurrency=concurrency, card_density=card_density, partial_result_callback=on_chunk_generated, stop_callback=lambda: self.stop_requested, filter_yes_no=filter_yes_no, exclude_trivia=exclude_trivia, smart_deck_match=smart_deck_match, ai_refinement=ai_refinement)
+            qa_data = generate_qa_pairs(text, deck_names=deck_names, target_language=target_lang, log_callback=self.logger.info, api_url=api_url, api_key=api_key, model=model, temperature=temperature, max_tokens=max_tokens, prompt_style=prompt_style, context_window=context_window, concurrency=concurrency, card_density=card_density, partial_result_callback=on_chunk_generated, stop_callback=lambda: self.stop_requested, filter_yes_no=filter_yes_no, exclude_trivia=exclude_trivia, smart_deck_match=smart_deck_match, ai_refinement=ai_refinement, deterministic_mode=deterministic_mode, pipeline_stats=pipeline_stats)
             
+            pipeline_stats.finish()
+            summary = pipeline_stats.get_summary()
+            self.after(0, lambda: self.logger.info(summary))
+
             # Final log
             self.after(0, lambda: self.logger.info(f"Generation complete. Total {len(qa_data)} cards. Please review and approve."))
 

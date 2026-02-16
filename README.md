@@ -76,6 +76,7 @@ Go to the **Settings** tab to customize:
 - **Concurrency**: Increase to process multiple text chunks simultaneously (requires a strong GPU).
 - **AI Refinement**: Enable for a second pass where AI fixes grammar and formatting (slower but higher quality).
 - **Debug Mode**: Enable verbose logging to troubleshoot LLM connection or parsing issues.
+- **Deterministic Mode**: Enable for reproducible output (fixed seed, sequential processing).
 
 ## Reliability & Failure Handling
 
@@ -85,11 +86,52 @@ NeuralDeck has been hardened to handle common issues:
 - **Concurrency**: Automatically limits parallel workers to your system's CPU count to prevent freezing.
 - **Anki Sync**: Verifies connection before syncing to prevent data loss.
 
+## New Features & Architecture
+
+### Deterministic Generation Mode
+NeuralDeck now includes a **Deterministic Mode** for reproducible results.
+- **Fixed Seeding**: Sets random seeds to ensure consistent output for the same input.
+- **Sequential Processing**: Disables parallelism to guarantee chunk order and eliminate race conditions.
+- **No Shuffling**: Disables deck shuffling to ensure LLM deck assignment is consistent.
+
+### Performance Metrics & Profiling
+The application now tracks detailed metrics during generation:
+- **Extraction Time**: Time taken to read and parse the PDF.
+- **Chunking Time**: Time taken to split text into manageable parts.
+- **LLM Processing Time**: Cumulative time spent waiting for the AI.
+- **Throughput**: Cards generated per second and total duration.
+A summary report is displayed in the logs upon completion.
+
+### Failure Isolation System
+The pipeline is designed to be resilient:
+- **Chunk-Level Isolation**: If a single text chunk fails (e.g., LLM network error, malformed response), it is logged to `failed_chunks_log.json`, but the rest of the document continues processing.
+- **Card Validation**: Generated cards are validated for minimum content length and quality. Rejected cards are logged to `rejected_cards_log.json`.
+- **Resource Guard**: Prevents processing of excessively large files or chunk counts to protect system memory.
+
+### Quality Validation Rules
+Each generated card passes through a `CardValidator`:
+- **Non-Empty**: Must have valid Question and Answer.
+- **Minimum Length**: Question > 10 chars, Answer > 3 chars.
+- **No Duplicates**: Duplicate questions within the same session are automatically filtered.
+- **Safety**: "Yes/No" answers are filtered out (configurable).
+
+### Testing & Mock System
+NeuralDeck includes a comprehensive test suite with mocks for external dependencies:
+- **MockLLM**: Simulates LLM responses for deterministic testing without a running server.
+- **MockAnki**: Simulates Anki bridge for integration testing.
+- **Integration Tests**: `tests/test_deterministic.py` and `tests/test_failure_isolation.py` ensure core reliability.
+
+Run tests with:
+```bash
+python -m unittest discover tests
+```
+
 ## Project Structure
 
 - `main.py`: Entry point.
 - `ui.py`: Tkinter-based GUI logic.
 - `document_processor.py`: PDF extraction, chunking, and LLM interaction logic.
+- `pipeline_utils.py`: Metrics, validation, and logging utilities.
 - `anki_integration.py`: HTTP client for communicating with the Anki add-on.
 - `anki_addon/`: Source code for the Anki plugin.
 
