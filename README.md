@@ -80,6 +80,27 @@ Go to the **Settings** tab to customize:
 - **Debug Mode**: Enable verbose logging to troubleshoot LLM connection or parsing issues.
 - **Deterministic Mode**: Enable for reproducible output (fixed seed, sequential processing).
 
+## Architecture & Workflow
+
+NeuralDeck operates as a modular system designed for local execution and seamless integration.
+
+### 1. Document Processing (`document_processor.py`)
+- **Ingestion**: Reads PDF files using `PyPDF2`.
+- **Chunking**: Splits text into context-aware chunks (respecting paragraphs and sentences) to fit within the LLM's context window.
+- **Generation**: Sends chunks to the Local LLM (via LM Studio API) with prompt instructions for formatting (JSON) and content extraction.
+- **Parsing**: Uses a robust JSON parser to extract card objects even from malformed LLM outputs.
+
+### 2. User Interface (`ui.py`)
+- Built with `ttkbootstrap` (modern Tkinter).
+- Manages the review workflow (Approve/Reject/Edit).
+- Handles concurrent processing threads to keep the UI responsive.
+- Displays real-time logs and progress.
+
+### 3. Anki Integration (`anki_addon/` & `anki_integration.py`)
+- **Bridge Add-on**: A lightweight HTTP server running inside Anki on port 5005.
+- **Communication**: The desktop app sends HTTP POST requests to the bridge to add cards.
+- **Security**: The bridge restricts requests to `localhost` to prevent unauthorized external access.
+
 ## Reliability & Failure Handling
 
 NeuralDeck has been hardened to handle common issues:
@@ -88,7 +109,7 @@ NeuralDeck has been hardened to handle common issues:
 - **Concurrency**: Automatically limits parallel workers to your system's CPU count to prevent freezing.
 - **Anki Sync**: Verifies connection before syncing to prevent data loss.
 
-## New Features & Architecture
+## New Features
 
 ### Deterministic Generation Mode
 NeuralDeck now includes a **Deterministic Mode** for reproducible results.
@@ -117,16 +138,31 @@ Each generated card passes through a `CardValidator`:
 - **No Duplicates**: Duplicate questions within the same session are automatically filtered.
 - **Safety**: "Yes/No" answers are filtered out (configurable).
 
-### Testing & Mock System
-NeuralDeck includes a comprehensive test suite with mocks for external dependencies:
-- **MockLLM**: Simulates LLM responses for deterministic testing without a running server.
-- **MockAnki**: Simulates Anki bridge for integration testing.
-- **Integration Tests**: `tests/test_deterministic.py` and `tests/test_failure_isolation.py` ensure core reliability.
+## Troubleshooting
 
-Run tests with:
-```bash
-python -m unittest discover tests
-```
+### Anki Connection Failed
+- **Symptoms**: "Could not connect to Anki" error when clicking "Sync".
+- **Fix**:
+  1. Ensure Anki is open.
+  2. Verify the "Anki Bridge" add-on is installed (Tools > Add-ons).
+  3. Check if another application is using port 5005.
+  4. Restart Anki.
+
+### PDF Text Not Found
+- **Symptoms**: "No text could be extracted" error.
+- **Cause**: The PDF is likely a scanned image without OCR.
+- **Fix**: Use an OCR tool (like Adobe Acrobat or online converters) to convert the scanned PDF to a text-selectable PDF before using NeuralDeck.
+
+### LLM Connection Error
+- **Symptoms**: "Connection Failed to http://localhost:1234..."
+- **Fix**:
+  1. Open LM Studio.
+  2. Load a model.
+  3. Start the "Local Server" on port 1234.
+  4. Ensure firewall is not blocking localhost connections.
+
+### "PyPDF2 module not found"
+- **Fix**: Run `pip install PyPDF2` in your terminal.
 
 ## Project Structure
 

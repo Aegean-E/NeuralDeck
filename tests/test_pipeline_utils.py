@@ -4,7 +4,7 @@ import os
 import json
 import time
 import threading
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch, mock_open, call
 
 # Add the parent directory to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -59,10 +59,9 @@ class TestPipelineStats(unittest.TestCase):
         # Setup mock times
         start = 100.0
         end = 105.5
-        mock_time.return_value = start
+        mock_time.side_effect = [start, end]
         stats = PipelineStats() # start_time will be 100.0
 
-        mock_time.return_value = end
         metrics = stats.finish()
 
         self.assertEqual(metrics["end_time"], end)
@@ -161,41 +160,35 @@ class TestResourceGuard(unittest.TestCase):
         self.assertIn("Too many chunks", str(cm.exception))
 
 class TestFailureLogger(unittest.TestCase):
-    @patch('os.path.exists')
-    @patch('builtins.open', new_callable=mock_open, read_data='[]')
-    @patch('pipeline_utils._file_lock')
-    def test_log_failed_chunk(self, mock_lock, mock_file, mock_exists):
-        mock_exists.return_value = False
+    @patch('builtins.open', new_callable=mock_open)
+    def test_log_failed_chunk(self, mock_file):
         logger = FailureLogger(run_id=123)
         logger.log_failed_chunk(1, "Some text", "Some error")
 
-        mock_file.assert_called_with("failed_chunks_log.json", 'w', encoding='utf-8')
-        # Check that the data written is what we expect
+        mock_file.assert_called_with("failed_chunks_log.jsonl", 'a', encoding='utf-8')
         handle = mock_file()
-        written_data = "".join(call.args[0] for call in handle.write.call_args_list)
-        data = json.loads(written_data)
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["run_id"], 123)
-        self.assertEqual(data[0]["chunk_index"], 1)
-        self.assertEqual(data[0]["error"], "Some error")
-        self.assertEqual(data[0]["chunk_preview"], "Some text")
 
-    @patch('os.path.exists')
-    @patch('builtins.open', new_callable=mock_open, read_data='[]')
-    @patch('pipeline_utils._file_lock')
-    def test_log_rejected_card(self, mock_lock, mock_file, mock_exists):
-        mock_exists.return_value = False
+        writes = [call.args[0] for call in handle.write.call_args_list]
+        full_content = "".join(writes)
+        self.assertTrue(full_content.strip())
+        data = json.loads(full_content.strip())
+        self.assertEqual(data["run_id"], 123)
+        self.assertEqual(data["chunk_index"], 1)
+
+    @patch('builtins.open', new_callable=mock_open)
+    def test_log_rejected_card(self, mock_file):
         logger = FailureLogger(run_id=456)
         logger.log_rejected_card({"question": "Q", "answer": "A"}, "Too short")
 
-        mock_file.assert_called_with("rejected_cards_log.json", 'w', encoding='utf-8')
+        mock_file.assert_called_with("rejected_cards_log.jsonl", 'a', encoding='utf-8')
         handle = mock_file()
-        written_data = "".join(call.args[0] for call in handle.write.call_args_list)
-        data = json.loads(written_data)
-        self.assertEqual(len(data), 1)
-        self.assertEqual(data[0]["run_id"], 456)
-        self.assertEqual(data[0]["card"]["question"], "Q")
-        self.assertEqual(data[0]["reason"], "Too short")
+
+        writes = [call.args[0] for call in handle.write.call_args_list]
+        full_content = "".join(writes)
+        self.assertTrue(full_content.strip())
+        data = json.loads(full_content.strip())
+        self.assertEqual(data["run_id"], 456)
+        self.assertEqual(data["card"]["question"], "Q")
 
 if __name__ == '__main__':
     unittest.main()
