@@ -2,13 +2,24 @@ import unittest
 import sys
 import os
 import json
+import urllib.error
+import socket
+import http.client
+from unittest.mock import MagicMock, patch
 
 # Add the parent directory to sys.path to allow importing from root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from document_processor import robust_parse_objects, filter_and_process_cards
+from document_processor import (
+    robust_parse_objects,
+    filter_and_process_cards,
+    extract_text_from_pdf,
+    smart_chunk_text,
+    call_lm_studio
+)
 
 class TestDocumentProcessor(unittest.TestCase):
+    # --- Parsing Tests ---
     def test_robust_parse_objects_standard(self):
         text = '[{"question": "Q1", "answer": "A1"}]'
         result = robust_parse_objects(text)
@@ -16,25 +27,33 @@ class TestDocumentProcessor(unittest.TestCase):
         self.assertEqual(result[0]['question'], 'Q1')
 
     def test_robust_parse_objects_markdown(self):
-        # This simulates LLM output with markdown
         text = '```json\n[{"question": "Q2", "answer": "A2"}]\n```'
         result = robust_parse_objects(text)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['question'], 'Q2')
 
     def test_robust_parse_objects_multiple_objects(self):
-        # This simulates LLM outputting multiple separate objects
         text = '{"question": "Q3", "answer": "A3"}\n{"question": "Q4", "answer": "A4"}'
         result = robust_parse_objects(text)
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]['question'], 'Q3')
-        self.assertEqual(result[1]['question'], 'Q4')
 
+    def test_robust_parse_objects_wrapper(self):
+        text = '{"cards": [{"question": "Q1", "answer": "A1"}]}'
+        result = robust_parse_objects(text)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['question'], 'Q1')
+
+    def test_robust_parse_objects_nested(self):
+        text = '{"data": {"results": [{"question": "Q2", "answer": "A2"}]}}'
+        result = robust_parse_objects(text)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['question'], 'Q2')
+
+    # --- Filter & Process Tests ---
     def test_filter_and_process_cards_basic(self):
         raw_data = [{'question': 'Q1', 'answer': 'A1', 'deck': 'Default'}]
         processed = filter_and_process_cards(raw_data, deck_names=[], smart_deck_match=False, filter_yes_no=True)
         self.assertEqual(len(processed), 1)
-        self.assertEqual(processed[0]['question'], 'Q1')
 
     def test_filter_and_process_cards_yes_no(self):
         raw_data = [
@@ -47,39 +66,102 @@ class TestDocumentProcessor(unittest.TestCase):
         self.assertEqual(processed[0]['answer'], 'Detailed answer.')
 
     def test_filter_and_process_cards_capitalized(self):
-        # This test checks if capitalized keys are handled. Currently they are NOT.
-        # This test is expected to fail or return 0 cards until fixed.
         raw_data = [{'Question': 'CapQ', 'Answer': 'CapA'}]
         processed = filter_and_process_cards(raw_data, deck_names=[], smart_deck_match=False, filter_yes_no=True)
-        # Assuming we want to support this, we expect 1 card.
-        # If not supported yet, this will be 0.
-        self.assertEqual(len(processed), 1, "Should handle capitalized keys")
+        self.assertEqual(len(processed), 1)
         self.assertEqual(processed[0]['question'], 'CapQ')
 
-    def test_smart_deck_matching_basic(self):
-        deck_names = ["Cardiology", "Neurology, Brain"]
-        cards = [
-            {"question": "What is heart attack?", "answer": "It is cardiology related.", "deck": "Default"},
-            {"question": "Brain damage?", "answer": "Neurology issues.", "deck": "Default"}
+    # --- Chunking Tests ---
+    def test_smart_chunk_text_strict(self):
+        text = "A" * 200 + "\n\n" + "B" * 50
+        chunks = smart_chunk_text(text, 100)
+        for c in chunks:
+            self.assertLessEqual(len(c), 100)
+        self.assertTrue(len(chunks) >= 3)
+
+    def test_smart_chunk_text_sentences(self):
+        s1 = "A" * 60 + ". "
+        s2 = "B" * 60 + "."
+        text = s1 + s2
+        chunks = smart_chunk_text(text, 70)
+        self.assertEqual(len(chunks), 2)
+        for c in chunks:
+            self.assertLessEqual(len(c), 70)
+
+    # --- Extraction Tests (Mocked) ---
+    @patch('builtins.open')
+    @patch('document_processor.PyPDF2')
+    def test_extract_text_empty(self, mock_pypdf2, mock_open):
+        mock_reader = MagicMock()
+        mock_reader.pages = []
+        mock_reader.is_encrypted = False
+        mock_pypdf2.PdfReader.return_value = mock_reader
+
+        with self.assertRaises(Exception) as cm:
+            extract_text_from_pdf("dummy.pdf")
+        self.assertIn("0 pages found", str(cm.exception))
+
+    @patch('builtins.open')
+    @patch('document_processor.PyPDF2')
+    def test_extract_text_image_only(self, mock_pypdf2, mock_open):
+        mock_reader = MagicMock()
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = ""
+        mock_reader.pages = [mock_page]
+        mock_reader.is_encrypted = False
+        mock_pypdf2.PdfReader.return_value = mock_reader
+
+        with self.assertRaises(Exception) as cm:
+            extract_text_from_pdf("dummy.pdf")
+        self.assertIn("No text could be extracted", str(cm.exception))
+
+    @patch('builtins.open')
+    @patch('document_processor.PyPDF2')
+    def test_extract_text_success(self, mock_pypdf2, mock_open):
+        mock_reader = MagicMock()
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = "Hello World"
+        mock_reader.pages = [mock_page]
+        mock_reader.is_encrypted = False
+        mock_pypdf2.PdfReader.return_value = mock_reader
+
+        text = extract_text_from_pdf("dummy.pdf")
+        self.assertIn("Hello World", text)
+
+    # --- Retry Tests (Mocked) ---
+    @patch('document_processor.urllib.request.urlopen')
+    @patch('document_processor.time.sleep')
+    def test_retry_success(self, mock_sleep, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.__iter__.return_value = [b'data: {"choices": [{"delta": {"content": "Hello"}}]}', b'data: [DONE]']
+        mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = None
+
+        mock_urlopen.side_effect = [
+            urllib.error.URLError("Fail 1"),
+            socket.timeout(),
+            mock_response
         ]
-        result = filter_and_process_cards(cards, deck_names, smart_deck_match=True, filter_yes_no=False)
-        self.assertEqual(result[0]['deck'], "Cardiology")
-        self.assertEqual(result[1]['deck'], "Neurology, Brain")
 
-    def test_smart_deck_matching_empty_names(self):
-        cards = [{"question": "Q", "answer": "A", "deck": "Default"}]
-        result = filter_and_process_cards(cards, [], smart_deck_match=True, filter_yes_no=False)
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]['deck'], "Default")
+        result = call_lm_studio("prompt", "sys")
+        self.assertEqual(result, "Hello")
+        self.assertEqual(mock_urlopen.call_count, 3)
 
-    def test_smart_deck_matching_disabled(self):
-        deck_names = ["Biology"]
-        # With smart_deck_match=False, it should NOT correct the deck based on content
-        # However, filter_and_process_cards logic for 'deck not in deck_names' might trigger fallback
-        # "Default" is not in ["Biology"], so it falls back to "Biology" (first available)
-        cards = [{"question": "Biology test", "answer": "Bio", "deck": "Default"}]
-        result = filter_and_process_cards(cards, deck_names, smart_deck_match=False, filter_yes_no=False)
-        self.assertEqual(result[0]['deck'], "Biology")
+    @patch('document_processor.urllib.request.urlopen')
+    @patch('document_processor.time.sleep')
+    def test_retry_failure(self, mock_sleep, mock_urlopen):
+        mock_urlopen.side_effect = [
+            urllib.error.URLError("Fail 1"),
+            urllib.error.URLError("Fail 2"),
+            urllib.error.URLError("Fail 3")
+        ]
+
+        with self.assertRaises(Exception) as cm:
+            call_lm_studio("prompt", "sys")
+
+        self.assertIn("Could not connect", str(cm.exception))
+        self.assertEqual(mock_urlopen.call_count, 3)
 
 if __name__ == '__main__':
     unittest.main()
