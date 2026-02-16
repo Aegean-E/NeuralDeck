@@ -82,41 +82,30 @@ def extract_text_from_pdf(file_path, log_callback=None):
 
     return full_text
 
-def extract_text_from_video(file_path):
-    """
-    Placeholder for video transcription logic.
-    Future implementation: Use tools like Whisper to transcribe video to text.
-    """
-    # TODO: Implement video transcription (e.g., using OpenAI Whisper)
-    raise NotImplementedError("Video processing is not yet implemented.")
-
 def check_llm_server(api_url, api_key="lm-studio"):
     """
     Checks if the LLM server is reachable.
     """
-    try:
-        # Simple HEAD or GET request to base URL (strip /v1/chat/completions)
-        # Ideally, we call /v1/models if available, or just check connectivity to host:port
-        parsed = urllib.parse.urlparse(api_url)
-        base_url = f"{parsed.scheme}://{parsed.netloc}/v1/models"
+    parsed = urllib.parse.urlparse(api_url)
 
+    # 1. Try hitting the models endpoint (standard OpenAI API)
+    try:
+        base_url = f"{parsed.scheme}://{parsed.netloc}/v1/models"
         req = urllib.request.Request(base_url, headers={"Authorization": f"Bearer {api_key}"})
-        # Short timeout for check
         with urllib.request.urlopen(req, timeout=3) as response:
             if response.status == 200:
                 return True
     except Exception:
-        # Fallback: Just try opening a socket to the host:port
-        try:
-            parsed = urllib.parse.urlparse(api_url)
-            port = parsed.port if parsed.port else (443 if parsed.scheme == 'https' else 80)
-            with socket.create_connection((parsed.hostname, port), timeout=3):
-                return True
-        except Exception:
-            pass
+        pass
 
-    # As a last resort, just try the chat completion endpoint with a dummy payload (might fail auth or 404, but proves connectivity)
-    # Actually, if both above failed, likely server is down or unreachable.
+    # 2. Fallback: Check TCP connection to host:port
+    try:
+        port = parsed.port if parsed.port else (443 if parsed.scheme == 'https' else 80)
+        with socket.create_connection((parsed.hostname, port), timeout=3):
+            return True
+    except Exception:
+        pass
+
     raise ConnectionError(f"Could not connect to LLM server at {api_url}. Is it running?")
 
 def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1/chat/completions", api_key="lm-studio", model="local-model", temperature=0.7, max_tokens=-1, stop_callback=None, timeout=120):
@@ -221,36 +210,29 @@ def smart_chunk_text(text, max_chars, min_chars=100):
     for para in paragraphs:
         para_len = len(para)
 
-        # Case 1: Paragraph fits in current chunk
+        # If paragraph fits, add it
         if current_length + para_len <= max_chars:
             current_chunk.append(para)
             current_length += para_len
             continue
 
-        # Case 2: Paragraph is too big for current chunk, but fits in a new chunk
-        if para_len <= max_chars:
-            if current_chunk:
-                chunks.append("".join(current_chunk))
-                current_chunk = []
-                current_length = 0
-            current_chunk.append(para)
-            current_length += para_len
-            continue
-
-        # Case 3: Paragraph is bigger than max_chars -> Split paragraph
+        # If paragraph is too big for current chunk, flush current chunk
         if current_chunk:
             chunks.append("".join(current_chunk))
             current_chunk = []
             current_length = 0
 
-        # Split long paragraph by sentences
+        # If paragraph fits in a new chunk by itself
+        if para_len <= max_chars:
+            current_chunk.append(para)
+            current_length += para_len
+            continue
+
+        # Paragraph is bigger than max_chars -> Split by sentences
         sentences = re.split(r'(?<=[.!?])\s+', para)
         for i, sent in enumerate(sentences):
-            # Restore spacing if it was consumed by split, except for the last part
             if i < len(sentences) - 1:
-                sent += " "
-
-            # Handle empty strings from split if any
+                sent += " " # Restore spacing
             if not sent: continue
 
             sent_len = len(sent)
@@ -261,7 +243,7 @@ def smart_chunk_text(text, max_chars, min_chars=100):
                     current_chunk = []
                     current_length = 0
 
-                # If even a single sentence is too long, hard split it
+                # Hard split if sentence is still too long
                 if sent_len > max_chars:
                     while sent:
                         part = sent[:max_chars]
@@ -275,37 +257,35 @@ def smart_chunk_text(text, max_chars, min_chars=100):
     if current_chunk:
         chunks.append("".join(current_chunk))
 
-    # Post-processing: Merge small chunks
-    final_chunks = []
-    for chunk in chunks:
-        if not final_chunks:
-            final_chunks.append(chunk)
-            continue
-        
-        last = final_chunks[-1]
+    # Merge small chunks
+    if not chunks:
+        return []
 
-        # If current chunk is too small, try to merge with previous
-        if len(chunk) < min_chars:
-            if len(last) + len(chunk) <= max_chars:
-                final_chunks[-1] += chunk
-            else:
-                final_chunks.append(chunk)
-        # If previous chunk was too small, try to merge current into it
-        elif len(last) < min_chars:
-            if len(last) + len(chunk) <= max_chars:
-                final_chunks[-1] += chunk
-            else:
-                final_chunks.append(chunk)
+    merged_chunks = []
+    current_merge = chunks[0]
+
+    for i in range(1, len(chunks)):
+        next_chunk = chunks[i]
+        if len(current_merge) < min_chars and (len(current_merge) + len(next_chunk) <= max_chars):
+            current_merge += next_chunk
         else:
-            final_chunks.append(chunk)
+            merged_chunks.append(current_merge)
+            current_merge = next_chunk
+    merged_chunks.append(current_merge)
 
-    return final_chunks
+    return merged_chunks
 
 def robust_parse_objects(text):
     """
     Scans the text for JSON objects and extracts them individually.
     This is resilient to malformed arrays, missing commas, or truncated tails.
     Also extracts nested cards from wrapper objects.
+
+    Args:
+        text (str): The text containing JSON objects (possibly with Markdown or other noise).
+
+    Returns:
+        list: A list of extracted dictionary objects representing cards.
     """
     # 1. Strip Markdown Code Blocks (common LLM artifact)
     # Only remove if they appear at the very start/end or on their own lines to avoid destroying content
@@ -321,23 +301,22 @@ def robust_parse_objects(text):
     results = []
     
     def extract_cards(obj):
+        """Iteratively extract cards from nested JSON structure."""
         extracted = []
-        if isinstance(obj, dict):
-            # Check if this dict acts as a card
-            # Case insensitive check for keys
-            keys_lower = {k.lower(): k for k in obj.keys()}
-            if 'question' in keys_lower and 'answer' in keys_lower:
-                # Normalize keys to lowercase for consistency if needed,
-                # but better to keep original and let filter_and_process handle it.
-                # Just return the obj as is.
-                extracted.append(obj)
-            else:
-                # Recursively search values
-                for v in obj.values():
-                    extracted.extend(extract_cards(v))
-        elif isinstance(obj, list):
-            for item in obj:
-                extracted.extend(extract_cards(item))
+        stack = [obj]
+        while stack:
+            curr = stack.pop()
+            if isinstance(curr, dict):
+                # Check if this dict acts as a card
+                # Case insensitive check for keys
+                keys_lower = {k.lower(): k for k in curr.keys()}
+                if 'question' in keys_lower and 'answer' in keys_lower:
+                    extracted.append(curr)
+                else:
+                    # Push values to stack in reverse order to preserve processing order
+                    stack.extend(reversed(list(curr.values())))
+            elif isinstance(curr, list):
+                stack.extend(reversed(curr))
         return extracted
 
     while pos < len(text):
