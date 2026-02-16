@@ -4,6 +4,7 @@ import time
 import re
 import urllib.request
 import urllib.error
+import http.client
 import socket
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -28,18 +29,36 @@ def extract_text_from_pdf(file_path):
             if reader.is_encrypted:
                 try:
                     reader.decrypt("")
-                except:
+                except Exception:
                     pass
             
-            for page in reader.pages:
-                extracted = page.extract_text()
-                if extracted:
-                    # Append parts to list for O(N) performance instead of O(N^2) string concatenation
-                    text_parts.append(extracted)
-                    text_parts.append("\n")
+            # If no pages, raise error
+            if not reader.pages:
+                raise Exception("PDF appears to be empty or corrupted (0 pages found).")
+
+            for i, page in enumerate(reader.pages):
+                try:
+                    extracted = page.extract_text()
+                    if extracted:
+                        # Append parts to list for O(N) performance instead of O(N^2) string concatenation
+                        text_parts.append(extracted)
+                        text_parts.append("\n")
+                except Exception as page_error:
+                    # Log warning for specific page failure but continue
+                    print(f"Warning: Failed to extract text from page {i+1}: {page_error}")
+                    continue
+
+    except FileNotFoundError:
+        raise FileNotFoundError(f"PDF file not found: {file_path}")
     except Exception as e:
         raise Exception(f"Failed to read PDF: {e}")
-    return "".join(text_parts)
+
+    full_text = "".join(text_parts)
+
+    if not full_text.strip():
+        raise Exception("No text could be extracted from this PDF. It might be a scanned image, encrypted, or corrupted. Please use an OCR tool first.")
+
+    return full_text
 
 def extract_text_from_video(file_path):
     """
@@ -52,6 +71,7 @@ def extract_text_from_video(file_path):
 def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1/chat/completions", api_key="lm-studio", model="local-model", temperature=0.7, max_tokens=-1, stop_callback=None, timeout=120):
     """
     Calls the local LM Studio server (OpenAI compatible API).
+    Includes retries with exponential backoff for network issues.
     """
     headers = {
         "Content-Type": "application/json",
@@ -87,7 +107,11 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
                     if stop_callback and stop_callback():
                         raise Exception("Processing stopped by user.")
 
-                    line = line.decode('utf-8').strip()
+                    try:
+                        line = line.decode('utf-8').strip()
+                    except Exception:
+                        continue # Skip bad lines
+
                     if line.startswith("data: "):
                         data_str = line[6:]
                         if data_str == "[DONE]":
@@ -102,17 +126,26 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
                         except:
                             pass
 
+            # If we got a response but it's empty, that might be an error too (or just empty completion)
+            if not full_response:
+                # Retry if empty? Maybe not, could be valid.
+                pass
+
             return full_response
 
-        except urllib.error.URLError as e:
-            last_exception = ConnectionError(f"Could not connect to AI Server at {api_url}. Ensure the server is running. Details: {e}")
+        except (urllib.error.URLError, socket.timeout, http.client.IncompleteRead, ConnectionError) as e:
+            # Handle specific connection errors
+            if isinstance(e, urllib.error.URLError):
+                 err_msg = f"Could not connect to AI Server at {api_url}. Details: {e}"
+            else:
+                 err_msg = f"Network error during AI call: {e}"
+
+            last_exception = Exception(err_msg)
+
+            # Exponential backoff: 1s, 2s, 4s...
+            wait_time = 2 ** attempt
             if attempt < retries - 1:
-                time.sleep(2)
-                continue
-        except socket.timeout:
-            last_exception = Exception(f"AI Server timed out after {timeout} seconds.")
-            if attempt < retries - 1:
-                time.sleep(2)
+                time.sleep(wait_time)
                 continue
         except Exception as e:
             # Don't retry other exceptions (like "Processing stopped by user")
@@ -120,30 +153,72 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
 
     if last_exception:
         raise last_exception
-    raise Exception("Unknown error occurred during API call.")
+    raise Exception("Unknown error occurred during API call (Retries exhausted).")
 
 def smart_chunk_text(text, max_chars):
     """
-    Splits text into chunks respecting paragraph boundaries to avoid cutting sentences.
+    Splits text into chunks respecting paragraph boundaries.
+    If a single paragraph exceeds max_chars, it splits by sentences.
+    If a single sentence exceeds max_chars, it hard splits.
     """
     chunks = []
     current_chunk = []
     current_length = 0
     
-    # Split by paragraphs (double newline) or single lines
     paragraphs = text.split('\n')
     
     for para in paragraphs:
         para += "\n" # Restore newline
-        if current_length + len(para) > max_chars:
+        para_len = len(para)
+
+        # Case 1: Paragraph fits in current chunk
+        if current_length + para_len <= max_chars:
+            current_chunk.append(para)
+            current_length += para_len
+            continue
+
+        # Case 2: Paragraph is too big for current chunk, but fits in a new chunk
+        if para_len <= max_chars:
             if current_chunk:
                 chunks.append("".join(current_chunk))
                 current_chunk = []
                 current_length = 0
-        
-        current_chunk.append(para)
-        current_length += len(para)
-    
+            current_chunk.append(para)
+            current_length += para_len
+            continue
+
+        # Case 3: Paragraph is bigger than max_chars -> Split paragraph
+        if current_chunk:
+            chunks.append("".join(current_chunk))
+            current_chunk = []
+            current_length = 0
+
+        # Split long paragraph by sentences
+        sentences = re.split(r'(?<=[.!?])\s+', para)
+        for i, sent in enumerate(sentences):
+            # Restore spacing if it was consumed by split, except for the last part
+            if i < len(sentences) - 1:
+                sent += " "
+
+            sent_len = len(sent)
+
+            if current_length + sent_len > max_chars:
+                if current_chunk:
+                    chunks.append("".join(current_chunk))
+                    current_chunk = []
+                    current_length = 0
+
+                # If even a single sentence is too long, hard split it
+                if sent_len > max_chars:
+                    while sent:
+                        part = sent[:max_chars]
+                        chunks.append(part)
+                        sent = sent[max_chars:]
+                    continue
+
+            current_chunk.append(sent)
+            current_length += sent_len
+
     if current_chunk:
         chunks.append("".join(current_chunk))
         
@@ -153,11 +228,32 @@ def robust_parse_objects(text):
     """
     Scans the text for JSON objects and extracts them individually.
     This is resilient to malformed arrays, missing commas, or truncated tails.
+    Also extracts nested cards from wrapper objects.
     """
     decoder = json.JSONDecoder()
     pos = 0
     results = []
     
+    def extract_cards(obj):
+        extracted = []
+        if isinstance(obj, dict):
+            # Check if this dict acts as a card
+            # Case insensitive check for keys
+            keys_lower = {k.lower(): k for k in obj.keys()}
+            if 'question' in keys_lower and 'answer' in keys_lower:
+                # Normalize keys to lowercase for consistency if needed,
+                # but better to keep original and let filter_and_process handle it.
+                # Just return the obj as is.
+                extracted.append(obj)
+            else:
+                # Recursively search values
+                for v in obj.values():
+                    extracted.extend(extract_cards(v))
+        elif isinstance(obj, list):
+            for item in obj:
+                extracted.extend(extract_cards(item))
+        return extracted
+
     while pos < len(text):
         # Find the start of the next object
         start_idx = text.find('{', pos)
@@ -167,7 +263,11 @@ def robust_parse_objects(text):
         try:
             # Try to decode a single JSON object starting at start_idx
             obj, end_idx = decoder.raw_decode(text, idx=start_idx)
-            results.append(obj)
+
+            # Recursively extract cards from the decoded object
+            found_cards = extract_cards(obj)
+            results.extend(found_cards)
+
             pos = end_idx
         except json.JSONDecodeError:
             # If decoding fails (e.g. truncated object or syntax error inside),

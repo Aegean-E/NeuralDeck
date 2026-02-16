@@ -6,6 +6,7 @@ from tkinter import filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 import threading
 import os
+import time
 import json
 from document_processor import extract_text_from_pdf, generate_qa_pairs
 from anki_integration import create_anki_deck, get_deck_names
@@ -410,6 +411,15 @@ class AnkiGeneratorUI(ttk.Window):
         self.after(0, self._append_log, message)
 
     def _append_log(self, message):
+        # File logging
+        try:
+            with open("session.log", "a", encoding="utf-8") as f:
+                timestamp = time.strftime("[%Y-%m-%d %H:%M:%S]")
+                f.write(f"{timestamp} {message}\n")
+        except Exception:
+            pass
+
+        # UI logging
         self.log_area.config(state='normal')
         self.log_area.insert("end", message + "\n")
         # Limit to approx 50000 characters
@@ -464,11 +474,6 @@ class AnkiGeneratorUI(ttk.Window):
             self.log(f"Extracting text from {os.path.basename(file_path)}...")
             text = extract_text_from_pdf(file_path)
             
-            if not text or not text.strip():
-                self.log("Error: No text extracted from PDF. It might be image-based, encrypted, or corrupted.")
-                self.after(0, lambda: self.generate_btn.config(state="normal"))
-                return
-
             self.log(f"Extracted {len(text)} characters.")
             
             self.source_text = text
@@ -490,8 +495,13 @@ class AnkiGeneratorUI(ttk.Window):
             # Final log
             self.after(0, lambda: self.log(f"Generation complete. Total {len(qa_data)} cards. Please review and approve."))
 
+        except FileNotFoundError as fnf:
+             self.log(f"Error: File not found. {fnf}")
+             self.after(0, lambda: messagebox.showerror("Error", f"File not found:\n{fnf}"))
         except Exception as e:
-            self.log(f"Error: {str(e)}")
+            self.log(f"Critical Error: {str(e)}")
+            # Show popup for errors to ensure user sees it
+            self.after(0, lambda: messagebox.showerror("Error", f"Processing Failed:\n{str(e)}"))
         finally:
             self.after(0, lambda: self.generate_btn.config(state="normal"))
             self.after(0, lambda: self.stop_btn.config(state="disabled"))
