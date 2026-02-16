@@ -71,8 +71,8 @@ class PipelineStats:
 class FailureLogger:
     def __init__(self, run_id=None):
         self.run_id = run_id or int(time.time())
-        self.failed_chunks_file = "failed_chunks_log.json"
-        self.rejected_cards_file = "rejected_cards_log.json"
+        self.failed_chunks_file = "failed_chunks_log.jsonl"
+        self.rejected_cards_file = "rejected_cards_log.jsonl"
         self._lock = threading.Lock()
 
     def log_failed_chunk(self, chunk_index, chunk_text, error):
@@ -83,7 +83,7 @@ class FailureLogger:
             "error": str(error),
             "chunk_preview": chunk_text[:200]
         }
-        self._append_to_json(self.failed_chunks_file, entry)
+        self._append_to_log(self.failed_chunks_file, entry)
 
     def log_rejected_card(self, card, reason):
         entry = {
@@ -92,22 +92,14 @@ class FailureLogger:
             "card": card,
             "reason": reason
         }
-        self._append_to_json(self.rejected_cards_file, entry)
+        self._append_to_log(self.rejected_cards_file, entry)
 
-    def _append_to_json(self, filepath, entry):
+    def _append_to_log(self, filepath, entry):
+        """Appends a single JSON entry as a new line (JSONL format)."""
         with _file_lock:
-            data = []
-            if os.path.exists(filepath):
-                try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                except json.JSONDecodeError:
-                    pass
-
-            data.append(entry)
-
-            with open(filepath, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
+            with open(filepath, 'a', encoding='utf-8') as f:
+                json.dump(entry, f, ensure_ascii=False)
+                f.write('\n')
 
 class CardValidator:
     @staticmethod
