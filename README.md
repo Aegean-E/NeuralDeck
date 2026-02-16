@@ -106,8 +106,8 @@ A summary report is displayed in the logs upon completion.
 
 ### Failure Isolation System
 The pipeline is designed to be resilient:
-- **Chunk-Level Isolation**: If a single text chunk fails (e.g., LLM network error, malformed response), it is logged to `failed_chunks_log.json`, but the rest of the document continues processing.
-- **Card Validation**: Generated cards are validated for minimum content length and quality. Rejected cards are logged to `rejected_cards_log.json`.
+- **Chunk-Level Isolation**: If a single text chunk fails (e.g., LLM network error, malformed response), it is logged to `failed_chunks_log.jsonl`, but the rest of the document continues processing.
+- **Card Validation**: Generated cards are validated for minimum content length and quality. Rejected cards are logged to `rejected_cards_log.jsonl`.
 - **Resource Guard**: Prevents processing of excessively large files or chunk counts to protect system memory.
 
 ### Quality Validation Rules
