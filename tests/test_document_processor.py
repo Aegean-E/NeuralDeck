@@ -33,6 +33,12 @@ class TestDocumentProcessor(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['question'], 'Q2')
 
+    def test_robust_parse_objects_markdown_with_nested_code(self):
+        text = '```json\n[{"question": "How to print?", "answer": "Use ```python print()```"}]\n```'
+        result = robust_parse_objects(text)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['answer'], 'Use ```python print()```')
+
     def test_robust_parse_objects_multiple_objects(self):
         text = '{"question": "Q3", "answer": "A3"}\n{"question": "Q4", "answer": "A4"}'
         result = robust_parse_objects(text)
@@ -77,6 +83,16 @@ class TestDocumentProcessor(unittest.TestCase):
         processed = filter_and_process_cards(raw_data, deck_names=[], smart_deck_match=False, filter_yes_no=True)
         self.assertEqual(len(processed), 1)
         self.assertEqual(processed[0]['question'], 'CapQ')
+
+    def test_filter_and_process_cards_whitespace(self):
+        raw_data = [
+            {'question': '   ', 'answer': 'Valid A'},
+            {'question': 'Valid Q', 'answer': '   '},
+            {'question': 'Valid Q2', 'answer': 'Valid A2'}
+        ]
+        processed = filter_and_process_cards(raw_data, deck_names=[], smart_deck_match=False, filter_yes_no=True)
+        self.assertEqual(len(processed), 1)
+        self.assertEqual(processed[0]['question'], 'Valid Q2')
 
     # --- Chunking Tests ---
     def test_smart_chunk_text_strict(self):
@@ -158,6 +174,29 @@ class TestDocumentProcessor(unittest.TestCase):
         text = extract_text_from_pdf("dummy.pdf")
         self.assertIn("Hello World", text)
 
+    @patch('builtins.open')
+    @patch('document_processor.PyPDF2')
+    def test_extract_text_page_error(self, mock_pypdf2, mock_open):
+        mock_reader = MagicMock()
+
+        page1 = MagicMock()
+        page1.extract_text.return_value = "Page 1 Content"
+
+        page2 = MagicMock()
+        page2.extract_text.side_effect = Exception("Corrupt Page")
+
+        page3 = MagicMock()
+        page3.extract_text.return_value = "Page 3 Content"
+
+        mock_reader.pages = [page1, page2, page3]
+        mock_reader.is_encrypted = False
+        mock_pypdf2.PdfReader.return_value = mock_reader
+
+        text = extract_text_from_pdf("dummy.pdf")
+        self.assertIn("Page 1 Content", text)
+        self.assertIn("EXTRACTION FAILED", text)
+        self.assertIn("Page 3 Content", text)
+
     # --- Retry Tests (Mocked) ---
     @patch('document_processor.urllib.request.urlopen')
     @patch('document_processor.time.sleep')
@@ -209,13 +248,14 @@ class TestDocumentProcessor(unittest.TestCase):
         with self.assertRaises(Exception) as cm:
             call_lm_studio("prompt", "sys")
 
-        self.assertIn("Could not connect", str(cm.exception))
+        self.assertIn("Connection Failed", str(cm.exception))
         self.assertEqual(mock_urlopen.call_count, 3)
 
+    @patch('document_processor.check_llm_server')
     @patch('document_processor.as_completed')
     @patch('document_processor.os.cpu_count')
     @patch('document_processor.ThreadPoolExecutor')
-    def test_concurrency_limit(self, mock_executor, mock_cpu_count, mock_as_completed):
+    def test_concurrency_limit(self, mock_executor, mock_cpu_count, mock_as_completed, mock_check_server):
         mock_cpu_count.return_value = 4
         # Mock executor instance context manager
         mock_executor.return_value.__enter__.return_value = MagicMock()
@@ -230,10 +270,11 @@ class TestDocumentProcessor(unittest.TestCase):
         # Should be clamped to 4
         mock_executor.assert_called_with(max_workers=4)
 
+    @patch('document_processor.check_llm_server')
     @patch('document_processor.smart_chunk_text')
     @patch('document_processor.as_completed')
     @patch('document_processor.ThreadPoolExecutor')
-    def test_stop_callback_stops_generation(self, mock_executor, mock_as_completed, mock_chunk):
+    def test_stop_callback_stops_generation(self, mock_executor, mock_as_completed, mock_chunk, mock_check_server):
         mock_executor.return_value.__enter__.return_value = MagicMock()
         mock_executor.return_value.__exit__.return_value = None
 
