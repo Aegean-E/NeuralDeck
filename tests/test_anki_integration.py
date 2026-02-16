@@ -8,9 +8,21 @@ from unittest.mock import MagicMock, patch
 # Add the parent directory to sys.path to allow importing from root
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from anki_integration import create_anki_deck
+from anki_integration import create_anki_deck, check_anki_connection
 
 class TestAnkiIntegration(unittest.TestCase):
+    @patch('anki_integration.urllib.request.urlopen')
+    def test_check_anki_connection_success(self, mock_urlopen):
+        # Mock successful connection
+        mock_urlopen.return_value.__enter__.return_value = MagicMock()
+        self.assertTrue(check_anki_connection())
+
+    @patch('anki_integration.urllib.request.urlopen')
+    def test_check_anki_connection_failure(self, mock_urlopen):
+        # Mock failure
+        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+        self.assertFalse(check_anki_connection())
+
     @patch('anki_integration.urllib.request.urlopen')
     def test_create_anki_deck_success(self, mock_urlopen):
         # Mock successful response

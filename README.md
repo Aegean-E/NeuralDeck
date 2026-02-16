@@ -75,6 +75,15 @@ Go to the **Settings** tab to customize:
   - *High*: Exhaustive extraction (splits lists into multiple cards).
 - **Concurrency**: Increase to process multiple text chunks simultaneously (requires a strong GPU).
 - **AI Refinement**: Enable for a second pass where AI fixes grammar and formatting (slower but higher quality).
+- **Debug Mode**: Enable verbose logging to troubleshoot LLM connection or parsing issues.
+
+## Reliability & Failure Handling
+
+NeuralDeck has been hardened to handle common issues:
+- **PDF Extraction**: Skips corrupted or empty pages gracefully with a warning, instead of crashing.
+- **LLM Stability**: Retries connection on transient errors and filters out invalid JSON/Markdown artifacts.
+- **Concurrency**: Automatically limits parallel workers to your system's CPU count to prevent freezing.
+- **Anki Sync**: Verifies connection before syncing to prevent data loss.
 
 ## Project Structure
 

@@ -5,6 +5,7 @@ import os
 import re
 import urllib.request
 import urllib.error
+import urllib.parse
 import http.client
 import socket
 from collections import Counter
@@ -14,7 +15,7 @@ try:
 except ImportError:
     PyPDF2 = None
 
-def extract_text_from_pdf(file_path):
+def extract_text_from_pdf(file_path, log_callback=None):
     """
     Extracts text from a PDF file.
     """
@@ -52,12 +53,18 @@ def extract_text_from_pdf(file_path):
                         empty_pages.append(i + 1)
                         # Add placeholder for layout preservation context
                         text_parts.append(f"\n[PAGE {i+1}: NO TEXT DETECTED - SCANNED?]\n")
-                        print(f"Warning: Page {i+1} yielded no text (likely scanned or image).")
+                        msg = f"Warning: Page {i+1} yielded no text (likely scanned or image)."
+                        if log_callback: log_callback(msg)
+                        else: print(msg)
 
                 except Exception as page_error:
                     # Log warning for specific page failure but continue
-                    print(f"Warning: Failed to extract text from page {i+1}: {page_error}")
+                    msg = f"Warning: Failed to extract text from page {i+1}: {page_error}"
+                    if log_callback: log_callback(msg)
+                    else: print(msg)
+
                     empty_pages.append(i + 1)
+                    text_parts.append(f"\n[PAGE {i+1}: EXTRACTION FAILED]\n")
                     continue
 
     except FileNotFoundError:
@@ -80,6 +87,35 @@ def extract_text_from_video(file_path):
     """
     # TODO: Implement video transcription (e.g., using OpenAI Whisper)
     raise NotImplementedError("Video processing is not yet implemented.")
+
+def check_llm_server(api_url, api_key="lm-studio"):
+    """
+    Checks if the LLM server is reachable.
+    """
+    try:
+        # Simple HEAD or GET request to base URL (strip /v1/chat/completions)
+        # Ideally, we call /v1/models if available, or just check connectivity to host:port
+        parsed = urllib.parse.urlparse(api_url)
+        base_url = f"{parsed.scheme}://{parsed.netloc}/v1/models"
+
+        req = urllib.request.Request(base_url, headers={"Authorization": f"Bearer {api_key}"})
+        # Short timeout for check
+        with urllib.request.urlopen(req, timeout=3) as response:
+            if response.status == 200:
+                return True
+    except Exception:
+        # Fallback: Just try opening a socket to the host:port
+        try:
+            parsed = urllib.parse.urlparse(api_url)
+            port = parsed.port if parsed.port else (443 if parsed.scheme == 'https' else 80)
+            with socket.create_connection((parsed.hostname, port), timeout=3):
+                return True
+        except Exception:
+            pass
+
+    # As a last resort, just try the chat completion endpoint with a dummy payload (might fail auth or 404, but proves connectivity)
+    # Actually, if both above failed, likely server is down or unreachable.
+    raise ConnectionError(f"Could not connect to LLM server at {api_url}. Is it running?")
 
 def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1/chat/completions", api_key="lm-studio", model="local-model", temperature=0.7, max_tokens=-1, stop_callback=None, timeout=120):
     """
@@ -143,17 +179,12 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
                             # Ignore other minor parsing errors
                             pass
 
-            # If we got a response but it's empty, that might be an error too (or just empty completion)
-            if not full_response:
-                # Retry if empty? Maybe not, could be valid.
-                pass
-
             return full_response
 
         except (urllib.error.URLError, socket.timeout, http.client.IncompleteRead, ConnectionError) as e:
             # Handle specific connection errors
             if isinstance(e, urllib.error.URLError):
-                 err_msg = f"Could not connect to AI Server at {api_url}. Details: {e}"
+                 err_msg = f"Connection Failed to {api_url}. Details: {e.reason}"
             else:
                  err_msg = f"Network error during AI call: {e}"
 
@@ -182,10 +213,9 @@ def smart_chunk_text(text, max_chars):
     current_chunk = []
     current_length = 0
     
-    paragraphs = text.split('\n')
+    paragraphs = text.splitlines(keepends=True)
     
     for para in paragraphs:
-        para += "\n" # Restore newline
         para_len = len(para)
 
         # Case 1: Paragraph fits in current chunk
@@ -217,6 +247,9 @@ def smart_chunk_text(text, max_chars):
             if i < len(sentences) - 1:
                 sent += " "
 
+            # Handle empty strings from split if any
+            if not sent: continue
+
             sent_len = len(sent)
 
             if current_length + sent_len > max_chars:
@@ -247,6 +280,15 @@ def robust_parse_objects(text):
     This is resilient to malformed arrays, missing commas, or truncated tails.
     Also extracts nested cards from wrapper objects.
     """
+    # 1. Strip Markdown Code Blocks (common LLM artifact)
+    # Only remove if they appear at the very start/end or on their own lines to avoid destroying content
+    text = text.strip()
+    if text.startswith("```"):
+        # Remove first line if it starts with ```
+        text = re.sub(r'^```[a-zA-Z]*\s*\n?', '', text, count=1)
+        # Remove last line if it is ```
+        text = re.sub(r'\n?```\s*$', '', text, count=1)
+
     decoder = json.JSONDecoder()
     pos = 0
     results = []
@@ -438,6 +480,10 @@ def filter_and_process_cards(raw_data_list, deck_names, smart_deck_match, filter
         q_text = " ".join(str(x) for x in q_val).strip() if isinstance(q_val, list) else str(q_val).strip()
         a_text = " ".join(str(x) for x in a_val).strip() if isinstance(a_val, list) else str(a_val).strip()
 
+        # Ensure content is not just whitespace
+        if not q_text or not a_text:
+            continue
+
         # Filter: Strictly remove Yes/No answers
         if filter_yes_no:
             a_lower = a_text.lower().strip()
@@ -575,6 +621,14 @@ def generate_qa_pairs(text, deck_names=[], target_language="English", log_callba
     """
     if log_callback:
         log_callback(f"Sending text to LM Studio for Q&A generation in {target_language}...")
+
+    # 1. Health Check
+    try:
+        check_llm_server(api_url, api_key)
+    except Exception as e:
+        if log_callback:
+            log_callback(f"Error: Could not connect to LLM Server: {e}")
+        return []
     
     if deck_names:
         target_decks = list(deck_names)

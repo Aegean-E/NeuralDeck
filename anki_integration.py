@@ -2,6 +2,19 @@ import json
 import urllib.request
 import urllib.error
 
+def check_anki_connection(port=5005):
+    """Simple check to see if the Anki add-on server is running."""
+    url = f"http://localhost:{port}/"
+    try:
+        # Try a quick connection. Even a 404 means the server is up.
+        with urllib.request.urlopen(url, timeout=1):
+            return True
+    except urllib.error.HTTPError:
+        # Server responded with an error (e.g. 404), so it is running.
+        return True
+    except Exception:
+        return False
+
 def get_deck_names(log_callback=None):
     """Fetches the list of deck names from the Anki add-on."""
     url = "http://localhost:5005/get_decks"

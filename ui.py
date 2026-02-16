@@ -10,7 +10,7 @@ import time
 import json
 import logging
 from document_processor import extract_text_from_pdf, generate_qa_pairs
-from anki_integration import create_anki_deck, get_deck_names
+from anki_integration import create_anki_deck, get_deck_names, check_anki_connection
 
 CONFIG_FILE = "config.json"
 
@@ -142,7 +142,8 @@ class AnkiGeneratorUI(ttk.Window):
 
     def setup_logging(self):
         self.logger = logging.getLogger("NeuralDeck")
-        self.logger.setLevel(logging.INFO)
+        level = logging.DEBUG if self.config.get("debug_mode", False) else logging.INFO
+        self.logger.setLevel(level)
         # Prevent adding handlers multiple times if re-initialized
         if not self.logger.handlers:
             # File Handler
@@ -336,6 +337,10 @@ class AnkiGeneratorUI(ttk.Window):
         self.ai_refinement_var = ttk.BooleanVar(value=self.config.get("ai_refinement", False))
         ttk.Checkbutton(qc_frame, text="AI Refinement (Two-Pass: Generation -> AI Check -> Edit)", variable=self.ai_refinement_var, bootstyle="round-toggle").pack(anchor=W, pady=2)
 
+        # Debug Mode
+        self.debug_mode_var = ttk.BooleanVar(value=self.config.get("debug_mode", False))
+        ttk.Checkbutton(qc_frame, text="Debug Mode (Verbose Logging)", variable=self.debug_mode_var, bootstyle="round-toggle").pack(anchor=W, pady=2)
+
         # Prompt Settings
         prompt_frame = ttk.Labelframe(container, text="Custom Prompt / Style Instructions", padding=15)
         prompt_frame.pack(fill=BOTH, expand=True, pady=10)
@@ -373,7 +378,13 @@ class AnkiGeneratorUI(ttk.Window):
         self.config["exclude_trivia"] = self.exclude_trivia_var.get()
         self.config["smart_deck_match"] = self.smart_deck_match_var.get()
         self.config["ai_refinement"] = self.ai_refinement_var.get()
+        self.config["debug_mode"] = self.debug_mode_var.get()
         self.config["prompt_style"] = self.prompt_text.get("1.0", "end-1c")
+
+        # Apply logging level immediately
+        level = logging.DEBUG if self.config["debug_mode"] else logging.INFO
+        self.logger.setLevel(level)
+
         self.save_config()
         messagebox.showinfo("Settings", "Settings saved successfully.")
 
@@ -501,7 +512,7 @@ class AnkiGeneratorUI(ttk.Window):
     def run_process(self, file_path, target_lang, api_url, api_key, model, temperature, max_tokens, prompt_style, deck_names, context_window, concurrency, card_density, filter_yes_no, exclude_trivia, smart_deck_match, ai_refinement):
         try:
             self.logger.info(f"Extracting text from {os.path.basename(file_path)}...")
-            text = extract_text_from_pdf(file_path)
+            text = extract_text_from_pdf(file_path, log_callback=self.logger.info)
             
             self.logger.info(f"Extracted {len(text)} characters.")
             
@@ -589,6 +600,11 @@ class AnkiGeneratorUI(ttk.Window):
             row.approved_var.set(state)
 
     def sync_to_anki(self):
+        # check connection first
+        if not check_anki_connection():
+            messagebox.showerror("Error", "Could not connect to Anki.\nPlease ensure Anki is open and the 'AI Anki Cards Bridge' add-on is installed and running on port 5005.")
+            return
+
         approved_cards = []
         for row in self.card_rows:
             data = row.get_data()
