@@ -1,4 +1,4 @@
-# NeuralDeck
+# NeuralDeck 0.2
 
 <p align="center">
   <img src="https://github.com/Aegean-E/NeuralDeck/blob/main/banner.png?raw=true" alt="NeuralDeck Banner" width="1200">
