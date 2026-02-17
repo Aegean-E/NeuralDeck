@@ -1,6 +1,6 @@
 {
-    "name": "Local AI Anki Cards Bridge",
-    "package": "LocalAIAnkiCardsBridge",
+    "name": "NeuralDeck Bridge",
+    "package": "NeuralDeckBridge",
     "api": "2.1",
     "version": "1.0",
     "config": {

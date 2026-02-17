@@ -84,4 +84,4 @@ def create_anki_deck(deck_name, qa_pairs, log_callback=None):
     except urllib.error.URLError as e:
         if log_callback:
             log_callback(f"Connection Error: {e}")
-        raise ConnectionError("Could not connect to Anki. Please ensure Anki is open and the 'AI Anki Cards Bridge' add-on is installed.")
+        raise ConnectionError("Could not connect to Anki. Please ensure Anki is open and the 'NeuralDeck Bridge' add-on is installed.")

@@ -9,11 +9,12 @@ import os
 import time
 import json
 import logging
-from document_processor import extract_text_from_pdf, generate_qa_pairs
+from document_processor import extract_text_from_document, generate_qa_pairs
 from anki_integration import create_anki_deck, get_deck_names, check_anki_connection
 from pipeline_utils import PipelineStats, ResourceGuard
 
 CONFIG_FILE = "config.json"
+SESSION_FILE = "session_cache.json"
 
 class TextWidgetHandler(logging.Handler):
     """Custom logging handler that writes to a Tkinter ScrolledText widget thread-safely."""
@@ -111,7 +112,7 @@ class AnkiGeneratorUI(ttk.Window):
         theme = self.config.get("theme", "darkly")
         super().__init__(themename=theme)
         
-        self.title(f"AI Anki Card Generator")
+        self.title("NeuralDeck")
         self.geometry("1200x800")
         
         # Data
@@ -122,6 +123,7 @@ class AnkiGeneratorUI(ttk.Window):
         self.card_rows = []
         self.source_text = ""
         self.stop_requested = False
+        self._session_loaded = False
         
         # Tabs
         self.notebook = ttk.Notebook(self)
@@ -177,8 +179,19 @@ class AnkiGeneratorUI(ttk.Window):
         ttk.Button(toolbar, text="Uncheck All", command=lambda: self.toggle_all_approvals(False), 
                    bootstyle="secondary-outline", width=12).pack(side=LEFT, padx=2)
 
+        ttk.Button(toolbar, text="Add Manual Card", command=self.add_manual_card, 
+                   bootstyle="info-outline").pack(side=LEFT, padx=(10, 0))
+
         # Proposal: Clear All Button
         ttk.Button(toolbar, text="Clear All", command=self.clear_all_cards, bootstyle="danger-link").pack(side=RIGHT, padx=5)
+
+        # Bulk move
+        bulk_deck_frame = ttk.Frame(toolbar)
+        bulk_deck_frame.pack(side=RIGHT, padx=10)
+        self.bulk_deck_var = ttk.StringVar()
+        self.bulk_deck_combo = ttk.Combobox(bulk_deck_frame, textvariable=self.bulk_deck_var, values=self.available_decks, state="readonly", width=20)
+        self.bulk_deck_combo.pack(side=LEFT, padx=(10, 5))
+        ttk.Button(bulk_deck_frame, text="Move Selected", command=self.bulk_assign_deck, bootstyle="primary-outline").pack(side=LEFT)
 
         # Review Area (Single Pane)
         self.review_frame = ScrolledFrame(self.review_container, autohide=True)
@@ -205,8 +218,8 @@ class AnkiGeneratorUI(ttk.Window):
         self.file_label = ttk.Label(self.file_box, text="No file selected", font=("Helvetica", 10), anchor="w")
         self.file_label.pack(side=LEFT, fill=X, expand=True)
         
-        # Select PDF Button
-        self.select_btn = ttk.Button(left_panel, text="Select PDF", command=self.select_file, bootstyle="primary-outline")
+        # Select Document Button
+        self.select_btn = ttk.Button(left_panel, text="Select Document", command=self.select_file, bootstyle="primary-outline")
         self.select_btn.pack(fill=X, pady=(0, 10))
 
         # Language Selection
@@ -454,6 +467,17 @@ class AnkiGeneratorUI(ttk.Window):
             lbl = ttk.Label(self.deck_list_frame, text="(No decks found)")
             lbl.pack(anchor=W, padx=5)
             self.deck_checkboxes.append(lbl)
+            
+        # Update bulk assignment dropdown
+        if hasattr(self, 'bulk_deck_combo'):
+            self.bulk_deck_combo['values'] = self.available_decks
+            if self.available_decks and not self.bulk_deck_var.get():
+                self.bulk_deck_var.set(self.available_decks[0])
+            
+        # Load session if not already loaded (runs once after initial deck fetch)
+        if not self._session_loaded:
+            self.load_session()
+            self._session_loaded = True
 
     def save_deck_selection(self):
         selected = [d for d, v in self.deck_vars.items() if v.get()]
@@ -461,7 +485,14 @@ class AnkiGeneratorUI(ttk.Window):
         self.save_config()
 
     def select_file(self):
-        file_path = filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")])
+        filetypes = [
+            ("All Supported Documents", "*.pdf *.docx *.pptx *.txt"),
+            ("PDF Files", "*.pdf"),
+            ("Word Documents", "*.docx"),
+            ("PowerPoint Presentations", "*.pptx"),
+            ("Text Files", "*.txt")
+        ]
+        file_path = filedialog.askopenfilename(filetypes=filetypes)
         if file_path:
             self.selected_file_path = file_path
             filename = os.path.basename(file_path)
@@ -478,7 +509,7 @@ class AnkiGeneratorUI(ttk.Window):
 
     def start_processing(self):
         if not self.selected_file_path:
-            messagebox.showwarning("Warning", "Please select a PDF file first.")
+            messagebox.showwarning("Warning", "Please select a document file first.")
             return
         
         # Ensure we capture the latest prompt from the UI even if "Save Settings" wasn't clicked
@@ -523,7 +554,7 @@ class AnkiGeneratorUI(ttk.Window):
             self.logger.info(f"Extracting text from {os.path.basename(file_path)}...")
 
             t_start = time.time()
-            text = extract_text_from_pdf(file_path, log_callback=self.logger.info)
+            text = extract_text_from_document(file_path, log_callback=self.logger.info)
             pipeline_stats.record_extraction_time(time.time() - t_start)
             
             self.logger.info(f"Extracted {len(text)} characters.")
@@ -567,6 +598,29 @@ class AnkiGeneratorUI(ttk.Window):
             row.destroy()
         self.card_rows = []
 
+    def add_manual_card(self):
+        """Adds a blank card row for manual authoring."""
+        default_deck = "Default"
+        if self.available_decks:
+            # Try to get a sensible default from selected decks
+            selected_decks = [d for d, v in self.deck_vars.items() if v.get()]
+            if selected_decks:
+                default_deck = selected_decks[0]
+            elif self.available_decks:
+                default_deck = self.available_decks[0]
+
+        row = CardReviewRow(self.review_frame, "", "", default_deck, self.available_decks, quote="", on_remove=self.remove_card_row)
+        # Pre-approve manual cards since the user is adding it intentionally
+        row.approved_var.set(True)
+        self.card_rows.insert(0, row) # Add to top
+        
+        # Force layout update
+        self.review_frame.update_idletasks()
+        
+        # Enable sync button
+        if self.card_rows:
+            self.sync_btn.config(state="normal")
+
     def append_cards_to_review(self, new_cards):
         self.logger.info(f"UI: Appending {len(new_cards)} new cards...")
         for item in new_cards:
@@ -592,6 +646,49 @@ class AnkiGeneratorUI(ttk.Window):
         if row in self.card_rows:
             self.card_rows.remove(row)
             row.destroy()
+            
+    def save_session(self):
+        """Saves the current state of generated cards to a JSON file."""
+        data = []
+        for row in self.card_rows:
+            row_data = row.get_data()
+            # get_data doesn't include the quote, so we grab it from the object
+            row_data['quote'] = row.quote
+            data.append(row_data)
+        
+        try:
+            with open(SESSION_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            self.logger.info(f"Session saved. {len(data)} cards cached.")
+        except Exception as e:
+            self.logger.error(f"Failed to save session: {e}")
+
+    def load_session(self):
+        """Restores cards from the session cache file."""
+        if not os.path.exists(SESSION_FILE):
+            return
+            
+        try:
+            with open(SESSION_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                
+            if not data:
+                return
+
+            self.logger.info(f"Restoring previous session ({len(data)} cards)...")
+            
+            for item in data:
+                # Create row with restored data
+                row = CardReviewRow(self.review_frame, item.get('question', ''), item.get('answer', ''), item.get('deck', 'Default'), self.available_decks, quote=item.get('quote', ''), on_remove=self.remove_card_row)
+                if item.get('approved', False):
+                    row.approved_var.set(True)
+                self.card_rows.append(row)
+            
+            self.review_frame.update_idletasks()
+            if self.card_rows:
+                self.sync_btn.config(state="normal")
+        except Exception as e:
+            self.logger.error(f"Failed to load session: {e}")
 
     def stop_processing(self):
         if messagebox.askyesno("Stop", "Are you sure you want to stop processing?"):
@@ -601,6 +698,7 @@ class AnkiGeneratorUI(ttk.Window):
 
     def on_close(self):
         """Handle window closing event to ensure all threads are killed."""
+        self.save_session()
         self.stop_requested = True
         self.destroy()
         os._exit(0)
@@ -615,10 +713,28 @@ class AnkiGeneratorUI(ttk.Window):
         for row in self.card_rows:
             row.approved_var.set(state)
 
+    def bulk_assign_deck(self):
+        """Assigns the selected deck to all checked cards."""
+        target_deck = self.bulk_deck_var.get()
+        if not target_deck:
+            messagebox.showwarning("Warning", "Please select a deck to assign.")
+            return
+
+        selected_rows = [row for row in self.card_rows if row.approved_var.get()]
+        
+        if not selected_rows:
+            messagebox.showinfo("Info", "No cards are checked. Please check the cards you want to move.")
+            return
+            
+        if messagebox.askyesno("Confirm", f"Move {len(selected_rows)} checked cards to deck '{target_deck}'?"):
+            for row in selected_rows:
+                row.deck_var.set(target_deck)
+            self.logger.info(f"Moved {len(selected_rows)} cards to deck '{target_deck}'.")
+
     def sync_to_anki(self):
         # check connection first
         if not check_anki_connection():
-            messagebox.showerror("Error", "Could not connect to Anki.\nPlease ensure Anki is open and the 'AI Anki Cards Bridge' add-on is installed and running on port 5005.")
+            messagebox.showerror("Error", "Could not connect to Anki.\nPlease ensure Anki is open and the 'NeuralDeck Bridge' add-on is installed and running on port 5005.")
             return
 
         approved_cards = []
@@ -649,5 +765,8 @@ class AnkiGeneratorUI(ttk.Window):
             
             messagebox.showinfo("Success", f"Successfully added {total_added} cards to Anki!")
             self.logger.info(f"Synced {total_added} cards.")
+            
+            # Optional: Clear session after successful sync? 
+            # For now, we keep them until user manually clears or closes app (which saves them).
         except Exception as e:
             messagebox.showerror("Error", str(e))

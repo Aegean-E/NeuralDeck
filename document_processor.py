@@ -17,6 +17,17 @@ try:
 except ImportError:
     PyPDF2 = None
 
+try:
+    import docx
+except ImportError:
+    docx = None
+
+try:
+    from pptx import Presentation
+except ImportError:
+    Presentation = None
+
+
 def extract_text_from_pdf(file_path, log_callback=None):
     """
     Extracts text from a PDF file.
@@ -81,6 +92,53 @@ def extract_text_from_pdf(file_path, log_callback=None):
         raise Exception("No text could be extracted from this PDF. It appears to be entirely scanned images or encrypted. Please use an external OCR tool first.")
 
     return full_text
+
+def _extract_text_from_docx(file_path):
+    """Extracts text from a .docx file."""
+    if docx is None:
+        raise ImportError("python-docx is not installed. Run 'pip install python-docx'.")
+    document = docx.Document(file_path)
+    return "\n".join([para.text for para in document.paragraphs])
+
+def _extract_text_from_pptx(file_path):
+    """Extracts text from a .pptx file."""
+    if Presentation is None:
+        raise ImportError("python-pptx is not installed. Run 'pip install python-pptx'.")
+    prs = Presentation(file_path)
+    text_runs = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            for paragraph in shape.text_frame.paragraphs:
+                for run in paragraph.runs:
+                    text_runs.append(run.text)
+    return "\n".join(text_runs)
+
+def _extract_text_from_txt(file_path):
+    """Extracts text from a .txt file."""
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        return f.read()
+
+def extract_text_from_document(file_path, log_callback=None):
+    """
+    Extracts text from a supported document file.
+    """
+    _, extension = os.path.splitext(file_path.lower())
+
+    if extension == ".pdf":
+        return extract_text_from_pdf(file_path, log_callback)
+    elif extension == ".docx":
+        if log_callback: log_callback("Extracting text from DOCX file...")
+        return _extract_text_from_docx(file_path)
+    elif extension == ".pptx":
+        if log_callback: log_callback("Extracting text from PPTX file...")
+        return _extract_text_from_pptx(file_path)
+    elif extension == ".txt":
+        if log_callback: log_callback("Extracting text from TXT file...")
+        return _extract_text_from_txt(file_path)
+    else:
+        raise ValueError(f"Unsupported file type: {extension}")
 
 def check_llm_server(api_url, api_key="lm-studio"):
     """
