@@ -168,4 +168,4 @@ Contributions are welcome! Whether it's bug reports, feature requests, or code c
 
 ## License
 
-This project is licensed under the **GNU GPLv3 License**. See the LICENSE file for details.
+This project is licensed under the **Apache License Version 2.0, January 2004**. See the LICENSE file for details.
