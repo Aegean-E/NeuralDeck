@@ -11,161 +11,551 @@
   <img alt="GitHub release (latest by date)" src="https://img.shields.io/github/v/release/Aegean-E/NeuralDeck">
   <img alt="GitHub" src="https://img.shields.io/github/license/Aegean-E/NeuralDeck">
   <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/Aegean-E/NeuralDeck">
+  <img alt="Python versions" src="https://img.shields.io/badge/python-3.10+-blue.svg">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg">
 </p>
 
 ---
+
+## Table of Contents
+
+1. [About](#about)
+2. [Why NeuralDeck?](#why-neuraldeck)
+3. [Features](#features)
+4. [Quick Start](#quick-start)
+5. [Installation](#installation)
+   - [Prerequisites](#prerequisites)
+   - [Setup NeuralDeck](#1-install-neuraldeck)
+   - [Setup Anki Bridge](#2-setup-anki-bridge)
+6. [Usage Guide](#usage-guide)
+7. [Configuration Settings](#configuration-settings)
+8. [Architecture](#architecture)
+   - [Module Overview](#module-overview)
+   - [Data Flow](#data-flow)
+9. [Testing](#testing)
+10. [Troubleshooting](#troubleshooting)
+11. [Building the Executable](#building-the-executable)
+12. [Security](#security)
+13. [Contributing](#contributing)
+14. [License](#license)
+
+---
+
+## About
 
 **NeuralDeck** is a powerful desktop application that transforms your study materials—PDFs, Word documents, and PowerPoints—into high-quality Anki flashcards. By leveraging the power of local Large Language Models (LLMs), it offers a completely offline and private workflow, ensuring your data never leaves your computer.
 
 It's designed for students, researchers, and lifelong learners who want to automate the tedious process of card creation without sacrificing control or privacy.
 
+---
+
 ## Why NeuralDeck?
 
--   **🧠 Intelligent & Automated**: Go from a 300-page textbook to a ready-to-study Anki deck in minutes, not hours.
--   **🔒 100% Private**: All processing happens locally. Your documents and generated cards are never sent to the cloud.
--   **🤖 LLM-Powered**: Utilizes state-of-the-art local LLMs (like Llama 3, Mistral, or Phi-3 via LM Studio) to understand context and generate accurate, relevant questions.
--   **🔧 Fully Controllable**: A comprehensive UI allows you to review, edit, approve, or discard every single card before it's synced to Anki.
--   **🌐 Multi-Format Support**: Natively handles `.pdf`, `.docx`, `.pptx`, and `.txt` files.
--   **🔌 Seamless Anki Integration**: A custom Anki add-on provides a direct bridge for one-click synchronization.
+- **🧠 Intelligent & Automated**: Go from a 300-page textbook to a ready-to-study Anki deck in minutes, not hours.
+- **🔒 100% Private**: All processing happens locally. Your documents and generated cards are never sent to the cloud.
+- **🤖 LLM-Powered**: Utilizes state-of-the-art local LLMs (like Llama 3, Mistral, or Phi-3 via LM Studio) to understand context and generate accurate, relevant questions.
+- **🔧 Fully Controllable**: A comprehensive UI allows you to review, edit, approve, or discard every single card before it's synced to Anki.
+- **🌐 Multi-Format Support**: Natively handles `.pdf`, `.docx`, `.pptx`, and `.txt` files.
+- **🔌 Seamless Anki Integration**: A custom Anki add-on provides a direct bridge for one-click synchronization.
+- **⚡ High Performance**: Multi-threaded processing with intelligent concurrency control.
+- **🛡️ Resilient**: Built with failure isolation to handle corrupted pages and unstable LLM responses gracefully.
 
-## Core Features
+---
 
--   **Local First Processing**: Connects to any OpenAI-compatible local server, with a default setup for LM Studio.
--   **Multi-Document Support**: Extracts text from PDF, Word (`.docx`), PowerPoint (`.pptx`), and plain text (`.txt`) files.
--   **Smart Deck Matching**: Automatically categorizes generated cards into your existing Anki decks. It analyzes the card's content and scores it against your deck names (e.g., a card about "myocardial infarction" will be routed to a "Cardiology" deck).
--   **AI Refinement Mode**: An optional second pass where the AI acts as an editor, correcting grammatical errors, improving question clarity, and ensuring consistency.
--   **High-Density Generation**: A special mode for deep, exhaustive learning. It forces the AI to extract every distinct fact, definition, and detail, which is ideal for complex subjects like medicine or law.
--   **Interactive Review & Edit**: A user-friendly interface to edit questions, answers, and deck assignments before syncing.
--   **Bulk Operations**: Check/uncheck all cards, add manual cards, and move multiple cards to a different deck at once.
--   **Session Persistence**: Your workspace is automatically saved. Close the app and resume your review session later without losing any generated cards.
--   **Resilient & Stable**: Built with failure isolation, the pipeline can handle corrupted document pages and unstable LLM responses without crashing.
+## Features
 
-## Prerequisites
+### Core Features
 
-- **Python 3.10+**
-- **Anki** (Desktop Application)
-- **A Local LLM Server**: LM Studio is recommended and works out-of-the-box. Any OpenAI-compatible API endpoint will work.
+| Feature | Description |
+|---------|-------------|
+| **Local First Processing** | Connects to any OpenAI-compatible local server, with a default setup for LM Studio. |
+| **Multi-Document Support** | Extracts text from PDF, Word (`.docx`), PowerPoint (`.pptx`), and plain text (`.txt`) files. |
+| **Smart Deck Matching** | Automatically categorizes generated cards into your existing Anki decks by analyzing content. |
+| **AI Refinement Mode** | Optional second AI pass for grammar correction, question clarity, and consistency. |
+| **High-Density Generation** | Forces exhaustive detail extraction for complex subjects like medicine or law. |
+| **Interactive Review & Edit** | User-friendly interface to edit questions, answers, and deck assignments before syncing. |
+| **Bulk Operations** | Check/uncheck all cards, add manual cards, and move multiple cards to different decks. |
+| **Session Persistence** | Workspace automatically saved. Resume your review session anytime. |
+| **Resilient Pipeline** | Handles corrupted document pages and unstable LLM responses without crashing. |
+
+### Advanced Features
+
+- **Deterministic Mode**: Ensures reproducible output for testing and consistency.
+- **Debug Mode**: Verbose logging for troubleshooting.
+- **Custom Prompts**: Guide AI behavior with custom instructions.
+- **Card Density Control**: Low (concepts), Medium (balanced), High (exhaustive).
+- **Parallel Processing**: Configurable concurrency for faster generation.
+- **Smart Filtering**: Automatic removal of Yes/No questions and duplicate content.
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone and install
+git clone https://github.com/Aegean-E/NeuralDeck.git
+cd NeuralDeck
+pip install -r requirements.txt
+
+# 2. Install Anki Bridge (see Installation section)
+
+# 3. Run NeuralDeck
+python main.py
+
+# 4. Start LM Studio, load a model, start server on port 1234
+
+# 5. Open Anki and enjoy!
+```
+
+---
 
 ## Installation
 
+### Prerequisites
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| **Python** | 3.10+ | Required for running the application |
+| **Anki** | Desktop | Must be running for sync to work |
+| **Local LLM Server** | - | LM Studio recommended |
+
+### Recommended LLM Models
+
+- **Meta-Llama-3-8B-Instruct** - Excellent general-purpose model
+- **Mistral-7B-Instruct** - Fast and efficient
+- **Phi-3-mini** - Lightweight option for older hardware
+- Any OpenAI-compatible model via LM Studio, Ollama, or text-generation-webui
+
 ### 1. Install NeuralDeck
 
-1.  Clone the repository:
-   ```bash
-   git clone https://github.com/Aegean-E/NeuralDeck.git
-   cd NeuralDeck
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/Aegean-E/NeuralDeck.git
+cd NeuralDeck
 
-2.  Install the required Python libraries:
-   ```bash
-   pip install -r requirements.txt
-   ```
+# Create virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# or
+venv\Scripts\activate  # Windows
 
-### 2. Install the Anki Bridge Add-on
+# Install dependencies
+pip install -r requirements.txt
 
-To allow NeuralDeck to communicate with Anki, you must install the included bridge add-on.
+# Optional: Install development dependencies for testing
+pip install pytest
+```
 
-1.  Open **Anki**.
-2.  Navigate to **Tools** > **Add-ons** > **View Files**.
-3.  Create a new folder named `NeuralDeckBridge`.
-4.  Copy the contents of the `anki_addon` folder (`__init__.py` and `manifest.json`) from this project into the new `NeuralDeckBridge` folder.
-5.  **Restart Anki**.
+### 2. Setup Anki Bridge
 
-When Anki restarts, the bridge will start automatically. You can verify this by checking the terminal where you launched Anki for a message like `NeuralDeck Bridge running on port 5005...`.
+To allow NeuralDeck to communicate with Anki, install the included bridge add-on:
+
+1. Open **Anki**
+2. Navigate to **Tools** > **Add-ons** > **View Files**
+3. Create a new folder named `NeuralDeckBridge`
+4. Copy the contents of the `anki_addon` folder (`__init__.py` and `manifest.json`) from this project into the new folder
+5. **Restart Anki**
+
+> **Verification**: Look for `NeuralDeck Bridge running on port 5005...` in the Anki terminal output.
+
+---
 
 ## Usage Guide
 
-1.  **Start your Local LLM**: Open LM Studio, load a model (e.g., `Meta-Llama-3-8B-Instruct`), and start the Local Server on the `Chat Complications` tab.
-2.  **Open Anki**: Ensure Anki is running in the background with the NeuralDeck Bridge active.
-3.  **Run NeuralDeck**:
-   ```bash
-   python main.py
-   ```
-4.  **Generate Cards**:
-    -   Click **Select Document** to choose your source file (`.pdf`, `.docx`, etc.).
-    -   Select your target **Language** and choose which of your Anki decks the AI can assign cards to.
-    -   Click **Generate Cards**.
-5.  **Review & Sync**:
-    -   As cards are generated, they will appear in the "Review" area.
-    -   You can edit the text directly in the entry boxes or change the assigned deck from the dropdown.
-    -   Use the checkboxes to **Approve** the cards you want to keep.
-    -   Click **Sync Approved to Anki** to send them directly to your collection.
+### Step 1: Start Your Local LLM
+
+1. Open **LM Studio**
+2. Download and load a model (e.g., `Meta-Llama-3-8B-Instruct`)
+3. Navigate to the **Local Server** tab
+4. Click **Start Server**
+5. Default endpoint: `http://localhost:1234/v1/chat/completions`
+
+### Step 2: Launch Anki
+
+Ensure Anki is running with the NeuralDeck Bridge add-on active.
+
+### Step 3: Run NeuralDeck
+
+```bash
+python main.py
+```
+
+### Step 4: Generate Cards
+
+1. Click **Select Document** to choose your source file (`.pdf`, `.docx`, `.pptx`, `.txt`)
+2. Select your target **Language** (e.g., English, Spanish, French)
+3. Choose which Anki decks the AI can assign cards to (or let Smart Deck Matching handle it)
+4. Configure **Card Density**:
+   - **Low**: Big-picture concepts and key definitions
+   - **Medium**: Balanced coverage of facts and concepts
+   - **High**: Exhaustive detail extraction
+5. Click **Generate Cards**
+
+### Step 5: Review & Sync
+
+- Cards appear in real-time in the Review area
+- Edit questions/answers directly in the entry boxes
+- Change assigned deck from the dropdown
+- Check/uncheck cards to approve or discard
+- Click **Sync Approved to Anki** to add cards to your collection
+
+### Bulk Operations
+
+- **Check All**: Select all generated cards
+- **Uncheck All**: Deselect all cards
+- **Add Manual Card**: Create custom cards manually
+- **Move to Deck**: Bulk move selected cards to a different deck
+
+---
 
 ## Configuration Settings
 
-All settings are accessible in the **Settings** tab and are saved automatically.
+All settings are accessible in the **Settings** tab and are saved automatically to `config.json`.
 
-| Setting                 | Description                                                                                                                            | Default Value                               |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| **Theme**               | Changes the visual theme of the application.                                                                                           | `darkly`                                    |
-| **API URL**             | The endpoint for your local LLM server.                                                                                                | `http://localhost:1234/v1/chat/completions` |
-| **API Key**             | The API key for your server (LM Studio's default is `lm-studio`).                                                                      | `lm-studio`                                 |
-| **Model Name**          | The model identifier to use for generation.                                                                                            | `local-model`                               |
-| **Temperature**         | Controls the creativity of the AI (0.0 = deterministic, 1.0 = creative).                                                               | `0.7`                                       |
-| **Card Density**        | `Low`: Big-picture concepts. `Medium`: Balanced. `High`: Exhaustive detail extraction.                                                 | `Medium`                                    |
-| **Concurrency**         | Number of parallel threads to use for generation. Limited to your CPU core count to prevent system overload.                           | `1`                                         |
-| **Filter 'Yes/No'**     | Automatically removes simple questions that can be answered with "Yes" or "No".                                                        | `True`                                      |
-| **Smart Deck Matching** | Enables content-aware analysis to assign cards to the most relevant deck.                                                              | `True`                                      |
-| **AI Refinement**       | Enables a second AI pass to review and edit generated cards for quality. Slower but produces better results.                           | `False`                                     |
-| **Deterministic Mode**  | Disables parallelism and sets a fixed seed to ensure the same output for the same input file. Useful for testing.                      | `False`                                     |
-| **Debug Mode**          | Enables verbose logging in the UI and `session.log` file for troubleshooting.                                                          | `False`                                     |
-| **Custom Prompt**       | Add your own instructions to guide the AI's tone and focus (e.g., "Focus on clinical definitions", "Make questions difficult").          | `(empty)`                                   |
+| Setting | Description | Default |
+|---------|-------------|---------|
+| **Theme** | Visual theme (darkly, flatly, litera, etc.) | `darkly` |
+| **API URL** | Local LLM server endpoint | `http://localhost:1234/v1/chat/completions` |
+| **API Key** | Server authentication key | `lm-studio` |
+| **Model Name** | Model identifier | `local-model` |
+| **Temperature** | AI creativity (0.0=deterministic, 1.0=creative) | `0.7` |
+| **Max Tokens** | Maximum tokens per response | `2048` |
+| **Card Density** | Detail level: Low/Medium/High | `Medium` |
+| **Concurrency** | Parallel threads (auto-limited to CPU cores) | `1` |
+| **Filter 'Yes/No'** | Remove simple Yes/No questions | `True` |
+| **Smart Deck Matching** | Content-aware deck assignment | `True` |
+| **AI Refinement** | Second pass for quality improvement | `False` |
+| **Deterministic Mode** | Fixed seed for reproducible output | `False` |
+| **Debug Mode** | Verbose logging | `False` |
+| **Custom Prompt** | Additional AI instructions | `(empty)` |
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NEURALDECK_CONFIG` | Custom config file path | `config.json` |
+| `NEURALDECK_LOG` | Log file location | `session.log` |
+
+---
 
 ## Architecture
 
-NeuralDeck operates as a modular system designed for local execution and seamless integration.
+### Module Overview
 
-1.  **UI (`ui.py`)**: The main interface built with `ttkbootstrap`. It manages the user workflow, displays real-time logs, and handles concurrent processing threads to keep the UI responsive.
-2.  **Document Processor (`document_processor.py`)**:
-    -   **Ingestion**: Reads various document formats (`.pdf`, `.docx`, etc.).
-    -   **Chunking**: Intelligently splits text into context-aware chunks that respect paragraph and sentence boundaries, optimized to fit the LLM's context window.
-    -   **Generation**: Sends chunks to the Local LLM with a detailed system prompt that instructs it on formatting, language, and quality control.
-    -   **Parsing**: Uses a robust JSON parser to reliably extract card objects even from malformed or noisy LLM outputs.
-3.  **Anki Integration (`anki_addon/` & `anki_integration.py`)**:
-    -   **NeuralDeck Bridge**: A lightweight HTTP server running inside Anki on port 5005. It exposes endpoints to get deck names and add new cards.
-    -   **Communication**: The desktop app sends secure HTTP POST requests to the bridge. The bridge restricts requests to `localhost` to prevent unauthorized external access.
+```
+NeuralDeck/
+├── main.py                 # Application entry point
+├── ui.py                  # Main GUI (ttkbootstrap)
+├── document_processor.py  # Document parsing & card generation
+├── pipeline_utils.py      # Utilities (stats, validation, logging)
+├── anki_integration.py   # HTTP client for Anki bridge
+├── anki_addon/           # Anki-side add-on
+│   ├── __init__.py       # Bridge server (port 5005)
+│   └── manifest.json     # Add-on metadata
+├── tests/                # Test suite (84 tests)
+├── build.py              # PyInstaller build script
+└── config.json           # User settings
+```
+
+### Detailed Module Documentation
+
+#### `main.py`
+Simple entry point that initializes and launches the GUI.
+
+```python
+from ui import AnkiGeneratorUI
+
+def main():
+    app = AnkiGeneratorUI()
+    app.mainloop()
+```
+
+#### `ui.py` - User Interface
+- **Framework**: ttkbootstrap (Bootstrap-styled Tkinter)
+- **Features**:
+  - Document selection and processing controls
+  - Real-time log display
+  - Interactive card review table
+  - Settings panel with live updates
+  - Concurrent thread management
+  - Session state persistence
+
+#### `document_processor.py` - Core Processing Engine
+
+| Function | Description |
+|----------|-------------|
+| `extract_text_from_pdf()` | PDF text extraction with PyPDF2, handles encrypted/corrupt files |
+| `_extract_text_from_docx()` | Word document parsing via python-docx |
+| `_extract_text_from_pptx()` | PowerPoint extraction via python-pptx |
+| `_extract_text_from_txt()` | Plain text file reading |
+| `extract_text_from_document()` | Unified dispatcher for all formats |
+| `check_llm_server()` | Connectivity check with fallback TCP probe |
+| `call_lm_studio()` | LLM API client with SSE streaming support |
+| `smart_chunk_text()` | Context-aware text splitting respecting boundaries |
+| `robust_parse_objects()` | JSON extraction from LLM responses (handles noise/markdown) |
+| `filter_and_process_cards()` | Card validation, deduplication, deck matching |
+| `refine_generated_cards()` | AI-powered quality improvement pass |
+| `generate_qa_pairs()` | Main pipeline orchestration with ThreadPoolExecutor |
+
+#### `pipeline_utils.py` - Utilities
+
+| Class | Description |
+|-------|-------------|
+| `PipelineStats` | Thread-safe metrics tracking (timing, counts, memory) |
+| `FailureLogger` | JSONL logging of failed chunks and rejected cards |
+| `CardValidator` | Card quality validation (length, duplicates, content) |
+| `ResourceGuard` | File size and chunk count limits |
+
+#### `anki_integration.py` - Desktop Client
+
+| Function | Description |
+|----------|-------------|
+| `check_anki_connection()` | Ping Anki bridge server |
+| `get_deck_names()` | Fetch deck list via HTTP GET |
+| `create_anki_deck()` | Send cards via HTTP POST |
+
+#### `anki_addon/__init__.py` - Anki Bridge Server
+
+| Component | Description |
+|-----------|-------------|
+| `AnkiBridgeHandler` | HTTP request handler |
+| `do_GET /get_decks` | Returns deck names from Anki collection |
+| `do_POST /add_cards` | Creates cards in Anki |
+| `do_OPTIONS` | CORS preflight handling |
+| `add_cards_to_anki()` | Core card creation with model/deck management |
+| Security | Path traversal prevention, localhost-only enforcement |
+
+### Data Flow
+
+```
+┌─────────────┐    ┌──────────────────┐    ┌─────────────┐
+│  Document  │───▶│ Document Processor│───▶│ LLM Server │
+│  (.pdf,    │    │ - Extraction     │    │ (LM Studio)│
+│   .docx)   │    │ - Chunking       │    └──────┬──────┘
+└─────────────┘    │ - Generation    │           │
+                   └────────┬─────────┘           │
+                            │ JSON               │
+                            ▼                    │
+                   ┌──────────────────┐           │
+                   │ Card Validator  │◀──────────┘
+                   │ - Filtering     │
+                   │ - Deck Matching │
+                   └────────┬─────────┘
+                            │
+                            ▼
+                   ┌──────────────────┐
+                   │    UI Display    │
+                   │ - Review/Edit    │
+                   │ - Approval       │
+                   └────────┬─────────┘
+                            │
+                            ▼
+                   ┌──────────────────┐    ┌────────┐
+                   │ Anki Integration │───▶│  Anki  │
+                   │ (HTTP POST)     │    │ Bridge │
+                   └──────────────────┘    └────────┘
+```
+
+---
+
+## Testing
+
+NeuralDeck includes a comprehensive test suite covering all core modules.
+
+### Running Tests
+
+```bash
+# Run all tests
+py -m pytest tests/ -v
+
+# Or use the test runner
+python run_tests.py
+python tests/run_tests.py
+
+# Run specific test file
+py -m pytest tests/test_document_processor.py -v
+
+# Run with coverage
+py -m pytest tests/ --cov=. --cov-report=html
+```
+
+### Test Coverage
+
+| Module | Test File | Coverage |
+|--------|----------|----------|
+| Anki Integration | `test_anki_integration.py`, `test_anki_integration_get_deck_names.py` | ✓ |
+| Anki Addon | `test_anki_addon_logic.py`, `test_anki_addon_media.py` | ✓ |
+| Document Processor | `test_document_processor.py`, `test_document_processor_extra.py` | ✓ |
+| Pipeline Utils | `test_pipeline_utils.py` | ✓ |
+| Full Pipeline | `test_pipeline.py` | ✓ |
+| Failure Isolation | `test_failure_isolation.py` | ✓ |
+| Deterministic Mode | `test_deterministic.py` | ✓ |
+
+**Total: 84 tests**
+
+---
 
 ## Troubleshooting
 
 ### Anki Connection Failed
-- **Symptoms**: "Could not connect to Anki" error when fetching decks or syncing.
-- **Fix**:
-  1. Ensure Anki is open and a profile is loaded.
-  2. Verify the **NeuralDeck Bridge** add-on is installed and enabled in **Tools > Add-ons**.
-  3. Check if another application is using port 5005. You can change the port in the add-on's config if needed.
-  4. Restart Anki.
+
+**Symptoms**: "Could not connect to Anki" error when fetching decks or syncing.
+
+**Solutions**:
+1. Ensure Anki is open and a profile is loaded
+2. Verify the **NeuralDeck Bridge** add-on is installed in **Tools > Add-ons**
+3. Check if port 5005 is available:
+   ```bash
+   netstat -an | grep 5005
+   ```
+4. Change port in add-on config if needed
+5. Restart Anki
 
 ### PDF Text Not Found
-- **Symptoms**: "No text could be extracted" error.
-- **Cause**: The PDF is likely a scanned image without OCR.
-- **Fix**: Use an OCR tool (like Adobe Acrobat, or free online services) to convert the scanned PDF to a text-selectable PDF before using it with NeuralDeck.
+
+**Symptoms**: "No text could be extracted" error.
+
+**Cause**: PDF is likely a scanned image without OCR.
+
+**Solutions**:
+1. Use OCR tools (Adobe Acrobat, PDF24, or online services)
+2. Convert to text-selectable PDF before processing
+3. Try a different PDF source
 
 ### LLM Connection Error
-- **Symptoms**: "Connection Failed to http://localhost:1234..."
-- **Fix**:
-  1. Open LM Studio.
-  2. Load a model.
-  3. Navigate to the server tab (e.g., "Local Server" in LM Studio) and click **Start Server**.
-  4. Ensure firewall is not blocking localhost connections.
+
+**Symptoms**: "Connection Failed to http://localhost:1234..."
+
+**Solutions**:
+1. Open LM Studio and verify model is loaded
+2. Start the Local Server (not just Chat)
+3. Check firewall rules for localhost
+4. Verify API URL matches LM Studio settings
+
+### Memory Issues with Large Files
+
+**Symptoms**: Application slows down or crashes.
+
+**Solutions**:
+1. Reduce **Concurrency** to 1
+2. Use **Low** Card Density
+3. Split large documents into smaller files
+
+### Cards Not Appearing in Correct Deck
+
+**Symptoms**: Cards sync but go to wrong deck.
+
+**Solutions**:
+1. Disable **Smart Deck Matching** for manual assignment
+2. Check deck names in Anki for exact matches
+3. Review card deck assignment in UI before sync
+
+---
 
 ## Building the Executable
 
-To create a standalone executable for Windows:
+### Using PyInstaller
 
-1.  Install PyInstaller:
-   ```bash
-   pip install pyinstaller
-   ```
-2.  Run the build command from the project root:
-   ```bash
-   pyinstaller --noconsole --onefile --name "NeuralDeck" main.py
-   ```
-3.  The executable (`NeuralDeck.exe`) will be located in the `dist/` folder.
+```bash
+# Install PyInstaller
+pip install pyinstaller
+
+# Build executable
+pyinstaller --noconsole --onefile --name "NeuralDeck" main.py
+
+# Or use the build script
+python build.py
+```
+
+The executable will be created in `dist/NeuralDeck-0.2/`.
+
+### Using Build Script (Recommended)
+
+The `build.py` script automatically includes ttkbootstrap assets:
+
+```bash
+python build.py
+```
+
+Output: `dist/NeuralDeck-0.2/NeuralDeck-0.2.exe`
+
+### Build Requirements
+
+- Windows 10+ (for .exe)
+- Python 3.10+
+- All requirements installed
+
+---
+
+## Security
+
+- **Local-Only Processing**: All document processing happens on your machine
+- **No Cloud Services**: Zero data leaves your computer
+- **Localhost Communication**: Anki bridge restricts to 127.0.0.1 only
+- **Path Traversal Protection**: Media file handling includes security checks
+- **Input Validation**: Card content is validated before Anki submission
+
+### Data Privacy
+
+| Data | Location | Encryption |
+|------|----------|------------|
+| Documents | RAM only | N/A |
+| Generated Cards | `session_cache.json` | None |
+| Settings | `config.json` | None |
+| Logs | `session.log` | None |
+
+**Recommendation**: Clear `session_cache.json` after syncing sensitive content.
+
+---
 
 ## Contributing
 
-Contributions are welcome! Whether it's bug reports, feature requests, or code contributions, please feel free to open an issue or submit a pull request.
+Contributions are welcome! Here's how you can help:
+
+### Reporting Issues
+
+1. Check existing issues before creating new ones
+2. Include steps to reproduce
+3. Attach relevant logs (enable Debug Mode)
+4. Specify OS, Python version, and Anki version
+
+### Pull Requests
+
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new functionality
+4. Ensure all tests pass
+5. Update documentation
+6. Submit pull request
+
+### Development Setup
+
+```bash
+# Clone and setup
+git clone https://github.com/Aegean-E/NeuralDeck.git
+cd NeuralDeck
+
+# Create virtual environment
+python -m venv dev
+dev\Scripts\activate  # Windows
+source dev/bin/activate  # Linux/macOS
+
+# Install all dependencies
+pip install -r requirements.txt
+pip install pytest pytest-cov
+
+# Run tests
+python -m pytest tests/ -v
+```
+
+---
 
 ## License
 
 This project is licensed under the **Apache License Version 2.0, January 2004**. See the LICENSE file for details.
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ for learners everywhere</sub>
+</p>

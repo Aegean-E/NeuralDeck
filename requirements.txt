@@ -1,0 +1,5 @@
+ttkbootstrap
+PyPDF2
+python-docx
+python-pptx
+requests
