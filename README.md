@@ -22,22 +22,23 @@
 1. [About](#about)
 2. [Why NeuralDeck?](#why-neuraldeck)
 3. [Features](#features)
-4. [Quick Start](#quick-start)
-5. [Installation](#installation)
+4. [Screenshots](#screenshots)
+5. [Quick Start](#quick-start)
+6. [Installation](#installation)
    - [Prerequisites](#prerequisites)
    - [Setup NeuralDeck](#1-install-neuraldeck)
    - [Setup Anki Bridge](#2-setup-anki-bridge)
-6. [Usage Guide](#usage-guide)
-7. [Configuration Settings](#configuration-settings)
-8. [Architecture](#architecture)
+7. [Usage Guide](#usage-guide)
+8. [Configuration Settings](#configuration-settings)
+9. [Architecture](#architecture)
    - [Module Overview](#module-overview)
    - [Data Flow](#data-flow)
-9. [Testing](#testing)
-10. [Troubleshooting](#troubleshooting)
-11. [Building the Executable](#building-the-executable)
-12. [Security](#security)
-13. [Contributing](#contributing)
-14. [License](#license)
+10. [Testing](#testing)
+11. [Troubleshooting](#troubleshooting)
+12. [Building the Executable](#building-the-executable)
+13. [Security](#security)
+14. [Contributing](#contributing)
+15. [License](#license)
 
 ---
 
@@ -86,6 +87,18 @@ It's designed for students, researchers, and lifelong learners who want to autom
 - **Card Density Control**: Low (concepts), Medium (balanced), High (exhaustive).
 - **Parallel Processing**: Configurable concurrency for faster generation.
 - **Smart Filtering**: Automatic removal of Yes/No questions and duplicate content.
+
+---
+
+## Screenshots
+
+### Main Interface
+
+<p align="center">
+  <img src="screenshots/ui_main.png" alt="NeuralDeck Main Interface" width="1000">
+</p>
+
+The main interface provides a clean, intuitive workflow for generating flashcards. Select your document, configure generation settings, and watch as AI-powered cards are created in real-time.
 
 ---
 
@@ -145,6 +158,17 @@ pip install -r requirements.txt
 # Optional: Install development dependencies for testing
 pip install pytest
 ```
+
+### Portable Executable (No Installation Required)
+
+If you prefer not to install Python dependencies, you can use the pre-built portable executable:
+
+1. Download the latest release from the [Releases](https://github.com/Aegean-E/NeuralDeck/releases) page
+2. Extract the ZIP file to your preferred location
+3. Run `NeuralDeck.exe`
+4. **Note**: The Anki Bridge add-on must still be installed separately (see below)
+
+> ⚠️ **Important**: Even when using the portable executable, you must install the Anki Bridge add-on to enable synchronization with Anki.
 
 ### 2. Setup Anki Bridge
 
@@ -211,6 +235,12 @@ python main.py
 ## Configuration Settings
 
 All settings are accessible in the **Settings** tab and are saved automatically to `config.json`.
+
+<p align="center">
+  <img src="screenshots/ui_settings.png" alt="NeuralDeck Settings Panel" width="1000">
+</p>
+
+Customize every aspect of the card generation process from the Settings panel. Configure your LLM connection, adjust generation parameters, and fine-tune the AI's output to match your learning needs.
 
 | Setting | Description | Default |
 |---------|-------------|---------|
@@ -329,17 +359,17 @@ def main():
 
 ```
 ┌─────────────┐    ┌──────────────────┐    ┌─────────────┐
-│  Document  │───▶│ Document Processor│───▶│ LLM Server │
-│  (.pdf,    │    │ - Extraction     │    │ (LM Studio)│
-│   .docx)   │    │ - Chunking       │    └──────┬──────┘
-└─────────────┘    │ - Generation    │           │
+│  Document   │───▶│ ocument Processor│───▶│ LLM Server  │
+│  (.pdf,     │    │ - Extraction     │    │ (LM Studio) │  
+│   .docx)    │    │ - Chunking       │    └──────┬──────┘
+└─────────────┘    │ - Generation     │           │
                    └────────┬─────────┘           │
-                            │ JSON               │
-                            ▼                    │
+                            │ JSON                │
+                            ▼                     │
                    ┌──────────────────┐           │
-                   │ Card Validator  │◀──────────┘
-                   │ - Filtering     │
-                   │ - Deck Matching │
+                   │ Card Validator   │◀──────────┘
+                   │ - Filtering      │
+                   │ - Deck Matching  │
                    └────────┬─────────┘
                             │
                             ▼
@@ -352,7 +382,7 @@ def main():
                             ▼
                    ┌──────────────────┐    ┌────────┐
                    │ Anki Integration │───▶│  Anki  │
-                   │ (HTTP POST)     │    │ Bridge │
+                   │ (HTTP POST)      │    │ Bridge │
                    └──────────────────┘    └────────┘
 ```
 
