@@ -346,13 +346,17 @@ def robust_parse_objects(text):
         list: A list of extracted dictionary objects representing cards.
     """
     # 1. Strip Markdown Code Blocks (common LLM artifact)
-    # Only remove if they appear at the very start/end or on their own lines to avoid destroying content
+    # Look for code blocks anywhere in the text (handling conversational preambles)
+    # Priority: ```json ... ``` -> ``` ... ``` -> raw text
+    json_match = re.search(r"```json\s*(.*?)```", text, re.DOTALL | re.IGNORECASE)
+    if json_match:
+        text = json_match.group(1)
+    else:
+        generic_match = re.search(r"```\s*(.*?)```", text, re.DOTALL)
+        if generic_match:
+            text = generic_match.group(1)
+            
     text = text.strip()
-    if text.startswith("```"):
-        # Remove first line if it starts with ```
-        text = re.sub(r'^```[a-zA-Z]*\s*\n?', '', text, count=1)
-        # Remove last line if it is ```
-        text = re.sub(r'\n?```\s*$', '', text, count=1)
 
     decoder = json.JSONDecoder()
     pos = 0

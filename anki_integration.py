@@ -2,12 +2,17 @@ import json
 import urllib.request
 import urllib.error
 
+# Create a specific opener that bypasses system proxies to ensure localhost connections work
+def _get_no_proxy_opener():
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 def check_anki_connection(port=5005):
     """Simple check to see if the Anki add-on server is running."""
-    url = f"http://localhost:{port}/"
+    url = f"http://127.0.0.1:{port}/"
     try:
         # Try a quick connection. Even a 404 means the server is up.
-        with urllib.request.urlopen(url, timeout=1):
+        opener = _get_no_proxy_opener()
+        with opener.open(url, timeout=1):
             return True
     except urllib.error.HTTPError:
         # Server responded with an error (e.g. 404), so it is running.
@@ -17,11 +22,12 @@ def check_anki_connection(port=5005):
 
 def get_deck_names(log_callback=None):
     """Fetches the list of deck names from the Anki add-on."""
-    url = "http://localhost:5005/get_decks"
+    url = "http://127.0.0.1:5005/get_decks"
     if log_callback:
         log_callback(f"Connecting to Anki at {url}...")
     try:
-        with urllib.request.urlopen(url, timeout=2) as response:
+        opener = _get_no_proxy_opener()
+        with opener.open(url, timeout=2) as response:
             result = json.loads(response.read().decode('utf-8'))
             decks = result.get("decks", [])
             if log_callback:
@@ -34,9 +40,9 @@ def get_deck_names(log_callback=None):
 
 def create_anki_deck(deck_name, qa_pairs, log_callback=None):
     """
-    Sends Q&A pairs to the custom Anki Add-on running on localhost:5005.
+    Sends Q&A pairs to the custom Anki Add-on running on 127.0.0.1:5005.
     """
-    url = "http://localhost:5005/add_cards"
+    url = "http://127.0.0.1:5005/add_cards"
     
     # Format data for the add-on
     cards = [{"question": q, "answer": a} for q, a in qa_pairs]
@@ -55,7 +61,8 @@ def create_anki_deck(deck_name, qa_pairs, log_callback=None):
     )
     
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
+        opener = _get_no_proxy_opener()
+        with opener.open(req, timeout=10) as response:
             result = json.loads(response.read().decode('utf-8'))
             count = result.get("count", 0)
             if log_callback:
@@ -77,7 +84,7 @@ def create_anki_deck(deck_name, qa_pairs, log_callback=None):
         except Exception:
             error_msg = error_body or str(e)
             
-        full_msg = f"Anki Server Error ({e.code}): {error_msg}"
+        full_msg = f"Anki Sync Failed ({e.code}): {error_msg}"
         if log_callback:
             log_callback(full_msg)
         raise Exception(full_msg)

@@ -65,6 +65,9 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 traceback.print_exc()
                 self.send_error(500, str(e))
+        else:
+            self.send_response(404)
+            self.end_headers()
 
     def do_POST(self):
         if self.path == '/add_cards':
@@ -203,7 +206,10 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
             
             # Compatibility for different Anki versions
             if hasattr(col, 'add_note'):
-                col.add_note(note, deck_id)
+                try:
+                    col.add_note(note, deck_id)
+                except TypeError:
+                    col.add_note(note)
             elif hasattr(col, 'addNote'):
                 col.addNote(note) # Legacy support
             else:
@@ -217,7 +223,7 @@ class AnkiBridgeHandler(BaseHTTPRequestHandler):
 
 def run_server():
     global httpd
-    server_address = ('localhost', PORT)
+    server_address = ('127.0.0.1', PORT)
     try:
         httpd = HTTPServer(server_address, AnkiBridgeHandler)
         print(f"NeuralDeck Bridge running on port {PORT}...")
