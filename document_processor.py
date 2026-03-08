@@ -345,20 +345,15 @@ def robust_parse_objects(text):
     Returns:
         list: A list of extracted dictionary objects representing cards.
     """
-    # 1. Strip Markdown Code Blocks (common LLM artifact)
-    # Look for code blocks anywhere in the text (handling conversational preambles)
-    # Priority: ```json ... ``` -> ``` ... ``` -> raw text
-    json_match = re.search(r"```json\s*(.*?)```", text, re.DOTALL | re.IGNORECASE)
-    if json_match:
-        text = json_match.group(1)
-    else:
-        generic_match = re.search(r"```\s*(.*?)```", text, re.DOTALL)
-        if generic_match:
-            text = generic_match.group(1)
-            
+    # 1. Pre-processing to fix common LLM JSON errors
+    # Fix trailing commas (e.g. {"a": 1,} -> {"a": 1}) which cause JSONDecodeError
+    text = re.sub(r",\s*}", "}", text)
+    text = re.sub(r",\s*]", "]", text)
+
     text = text.strip()
 
-    decoder = json.JSONDecoder()
+    # strict=False allows control characters (like newlines) inside strings
+    decoder = json.JSONDecoder(strict=False)
     pos = 0
     results = []
     
@@ -661,7 +656,8 @@ def _process_chunk_task(i, chunk, total_chunks, stop_callback, log_callback, max
         data = robust_parse_objects(response_text)
 
         if not data and log_callback:
-            log_callback(f"Warning: No valid cards found in part {i+1}. Response might be malformed or empty.")
+            preview = response_text[:200].replace('\n', ' ')
+            log_callback(f"Warning: No valid cards found in part {i+1}. Response might be malformed. Preview: {preview}...")
 
         # First Pass: Filter and Clean
         temp_cards = filter_and_process_cards(data, deck_names, smart_deck_match, filter_yes_no)
