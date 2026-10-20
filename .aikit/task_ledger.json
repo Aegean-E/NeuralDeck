@@ -2,10 +2,10 @@
   "version": 1,
   "active_task": {
     "task_id": "aikit-integration",
-    "last_phase": "phase 4",
-    "active_phase": 4,
+    "last_phase": "phase 5",
+    "active_phase": 5,
     "status": "in_progress",
-    "updated_at": 1792509528.0078092
+    "updated_at": 1792509556.1303027
   },
   "checkpoints": [
     {
@@ -33,6 +33,16 @@
       "status": "in_progress",
       "timestamp": 1792509528.0078092,
       "timestamp_str": "2026-10-20 18:18:48"
+    },
+    {
+      "task_id": "aikit-integration",
+      "phase": "phase 5",
+      "phase_num": 5,
+      "description": "[milestone 1/3] 4/4 gates pass: no-proxy Anki mocks, documented UI fallbacks, runtime logs ignored, README cold-start tree, map regenerated, ADR-001; checklists: passed",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792509556.1303027,
+      "timestamp_str": "2026-10-20 18:19:16"
     }
   ]
 }

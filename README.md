@@ -419,17 +419,16 @@ NeuralDeck includes a comprehensive test suite covering all core modules.
 
 ```bash
 # Run all tests
-py -m pytest tests/ -v
+python -m pytest tests -v
 
 # Or use the test runner
-python run_tests.py
 python tests/run_tests.py
 
 # Run specific test file
-py -m pytest tests/test_document_processor.py -v
+python -m pytest tests/test_document_processor.py -v
 
 # Run with coverage
-py -m pytest tests/ --cov=. --cov-report=html
+python -m pytest tests --cov=. --cov-report=html
 ```
 
 ### Test Coverage
