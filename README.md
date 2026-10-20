@@ -19,26 +19,71 @@
 
 ## Table of Contents
 
-1. [About](#about)
-2. [Why NeuralDeck?](#why-neuraldeck)
-3. [Features](#features)
-4. [Screenshots](#screenshots)
-5. [Quick Start](#quick-start)
-6. [Installation](#installation)
+1. [Cold-Start Quick Reference](#-30-second-cold-start-quick-reference)
+2. [What's Inside](#-whats-inside)
+3. [About](#about)
+4. [Why NeuralDeck?](#why-neuraldeck)
+5. [Features](#features)
+6. [Screenshots](#screenshots)
+7. [Quick Start](#quick-start)
+8. [Installation](#installation)
    - [Prerequisites](#prerequisites)
    - [Setup NeuralDeck](#1-install-neuraldeck)
    - [Setup Anki Bridge](#2-setup-anki-bridge)
-7. [Usage Guide](#usage-guide)
-8. [Configuration Settings](#configuration-settings)
-9. [Architecture](#architecture)
-   - [Module Overview](#module-overview)
-   - [Data Flow](#data-flow)
-10. [Testing](#testing)
-11. [Troubleshooting](#troubleshooting)
-12. [Building the Executable](#building-the-executable)
-13. [Security](#security)
-14. [Contributing](#contributing)
-15. [License](#license)
+9. [Usage Guide](#usage-guide)
+10. [Configuration Settings](#configuration-settings)
+11. [Architecture](#architecture)
+    - [Module Overview](#module-overview)
+    - [Data Flow](#data-flow)
+12. [Testing](#testing)
+13. [Troubleshooting](#troubleshooting)
+14. [Building the Executable](#building-the-executable)
+15. [Security](#security)
+16. [Contributing](#contributing)
+17. [License](#license)
+
+---
+
+## ⚡ 30-Second Cold-Start Quick Reference
+
+- **Runtime Prerequisites**: Python 3.10+, Anki desktop with the NeuralDeck Bridge add-on, and an OpenAI-compatible local LLM server (LM Studio recommended)
+- **Canonical Regression Shield Gate**:
+  ```bash
+  python -m pytest tests
+  ```
+
+### 🛠️ AIKit Commands (run from the AIKit workspace root)
+
+| Role | Command |
+|---|---|
+| Status, task and gates | `python aikit.py status NeuralDeck` |
+| Delivery check | `python aikit.py check NeuralDeck` |
+| Repair memory and map | `python aikit.py fix NeuralDeck` |
+| Resume an interrupted task | `python aikit.py resume NeuralDeck` |
+
+## 📦 What's Inside
+
+```text
+NeuralDeck/
+├── README.md
+├── .gitignore
+├── .aikit/                  <- project memory: project, guidelines, decisions, ledger, map
+├── .github/
+├── anki_addon/              <- Anki bridge add-on
+├── screenshots/             <- README images
+├── tests/                   <- regression suite
+├── main.py
+├── ui.py
+├── document_processor.py
+├── pipeline_utils.py
+├── anki_integration.py
+├── debug_anki.py
+├── debug_llm.py
+├── requirements.txt
+├── config.json
+├── banner.png
+└── LICENSE
+```
 
 ---
 
@@ -282,8 +327,7 @@ NeuralDeck/
 ├── anki_addon/           # Anki-side add-on
 │   ├── __init__.py       # Bridge server (port 5005)
 │   └── manifest.json     # Add-on metadata
-├── tests/                # Test suite (84 tests)
-├── build.py              # PyInstaller build script
+├── tests/                # Test suite
 └── config.json           # User settings
 ```
 
@@ -357,33 +401,12 @@ def main():
 
 ### Data Flow
 
-```
-┌─────────────┐    ┌──────────────────┐    ┌─────────────┐
-│  Document   │───▶│ ocument Processor│───▶│ LLM Server  │
-│  (.pdf,     │    │ - Extraction     │    │ (LM Studio) │  
-│   .docx)    │    │ - Chunking       │    └──────┬──────┘
-└─────────────┘    │ - Generation     │           │
-                   └────────┬─────────┘           │
-                            │ JSON                │
-                            ▼                     │
-                   ┌──────────────────┐           │
-                   │ Card Validator   │◀──────────┘
-                   │ - Filtering      │
-                   │ - Deck Matching  │
-                   └────────┬─────────┘
-                            │
-                            ▼
-                   ┌──────────────────┐
-                   │    UI Display    │
-                   │ - Review/Edit    │
-                   │ - Approval       │
-                   └────────┬─────────┘
-                            │
-                            ▼
-                   ┌──────────────────┐    ┌────────┐
-                   │ Anki Integration │───▶│  Anki  │
-                   │ (HTTP POST)      │    │ Bridge │
-                   └──────────────────┘    └────────┘
+```text
+Document (.pdf/.docx/.pptx/.txt)
+  -> document_processor: extract text, chunk, generate cards through the local LLM
+  -> pipeline_utils: validate, deduplicate, match decks
+  -> UI review and approval
+  -> anki_integration -> Anki Bridge (localhost:5005) -> Anki
 ```
 
 ---
@@ -492,22 +515,9 @@ pip install pyinstaller
 
 # Build executable
 pyinstaller --noconsole --onefile --name "NeuralDeck" main.py
-
-# Or use the build script
-python build.py
 ```
 
-The executable will be created in `dist/NeuralDeck-0.2/`.
-
-### Using Build Script (Recommended)
-
-The `build.py` script automatically includes ttkbootstrap assets:
-
-```bash
-python build.py
-```
-
-Output: `dist/NeuralDeck-0.2/NeuralDeck-0.2.exe`
+The executable is created at `dist/NeuralDeck.exe` on Windows.
 
 ### Build Requirements
 

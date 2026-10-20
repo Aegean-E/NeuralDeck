@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "active_task": {
+    "task_id": "aikit-integration",
+    "last_phase": "phase 4",
+    "active_phase": 4,
+    "status": "in_progress",
+    "updated_at": 1792509528.0078092
+  },
+  "checkpoints": [
+    {
+      "task_id": "aikit-integration",
+      "phase": "phase 2",
+      "phase_num": 2,
+      "description": "[1/3] Make NeuralDeck pass the AIKit Phase 4 gates: align Anki tests with the no-proxy opener, resolve hygiene findings, and restore the README cold-start contract.",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792508864.4926825,
+      "timestamp_str": "2026-10-20 18:07:44",
+      "impact_assessment": {
+        "why": "AIKit is now attached; its check must pass before NeuralDeck can commit under the project workflow.",
+        "benefits": "Green test, hygiene and guidelines gates; documented cold-start and accurate test command.",
+        "risks": "contract: test expectations and README structure change; dependency: none added; concurrency: no runtime behavior change; state: .aikit memory added to the project repo.",
+        "mitigation": "Keep production behavior unchanged, patch tests only where mocks target the wrong callable, mark deliberate fallbacks inline, and run the full gate after each milestone."
+      }
+    },
+    {
+      "task_id": "aikit-integration",
+      "phase": "phase 4",
+      "phase_num": 4,
+      "description": "[milestone 1/3] Tests, hygiene, guidelines and secrets gates all pass; Anki tests now patch the real no-proxy opener, deliberate fallbacks carry hygiene annotations, README documents the cold start and tree, and .aikit memory is ready to commit; checklists: passed (test, hygiene, guidelines, secrets)",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792509528.0078092,
+      "timestamp_str": "2026-10-20 18:18:48"
+    }
+  ]
+}

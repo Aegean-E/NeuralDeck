@@ -38,7 +38,7 @@ class TextWidgetHandler(logging.Handler):
                 self.text_widget.delete("1.0", f"1.0+{excess}c")
             self.text_widget.see("end")
             self.text_widget.config(state='disabled')
-        except Exception:
+        except Exception:  # hygiene: allow widget teardown must not break logging
             pass
 
 class CardReviewRow(ttk.Frame):
@@ -154,7 +154,7 @@ class AnkiGeneratorUI(ttk.Window):
                 file_handler = logging.FileHandler("session.log", encoding="utf-8")
                 file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="[%Y-%m-%d %H:%M:%S]"))
                 self.logger.addHandler(file_handler)
-            except Exception:
+            except Exception:  # hygiene: allow read-only session.log must not stop the UI
                 pass
 
             # UI Handler
@@ -378,7 +378,7 @@ class AnkiGeneratorUI(ttk.Window):
             try:
                 with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                     self.config = json.load(f)
-            except:
+            except:  # hygiene: allow invalid config falls back to defaults
                 pass
     
     def save_settings_ui(self):

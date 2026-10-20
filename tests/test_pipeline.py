@@ -16,8 +16,8 @@ class TestFullPipeline(unittest.TestCase):
     @patch('builtins.open')
     @patch('document_processor.check_llm_server')
     @patch('document_processor.call_lm_studio')
-    @patch('anki_integration.urllib.request.urlopen')
-    def test_full_pipeline_success(self, mock_anki_urlopen, mock_lm_studio, mock_check_server, mock_open, mock_pypdf2):
+    @patch('anki_integration._get_no_proxy_opener')
+    def test_full_pipeline_success(self, mock_anki_opener, mock_lm_studio, mock_check_server, mock_open, mock_pypdf2):
         # 1. Setup PDF Extraction Mock
         mock_reader = MagicMock()
         mock_page = MagicMock()
@@ -35,7 +35,7 @@ class TestFullPipeline(unittest.TestCase):
         # 3. Setup Anki Mock
         mock_anki_response = MagicMock()
         mock_anki_response.read.return_value = json.dumps({"count": 1}).encode('utf-8')
-        mock_anki_urlopen.return_value.__enter__.return_value = mock_anki_response
+        mock_anki_opener.return_value.open.return_value.__enter__.return_value = mock_anki_response
 
         # --- Execution Phase ---
 

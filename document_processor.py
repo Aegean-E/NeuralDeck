@@ -47,7 +47,7 @@ def extract_text_from_pdf(file_path, log_callback=None):
             if reader.is_encrypted:
                 try:
                     reader.decrypt("")
-                except Exception:
+                except Exception:  # hygiene: allow decryption errors only mean the PDF stays encrypted
                     pass
             
             # If no pages, raise error
@@ -153,7 +153,7 @@ def check_llm_server(api_url, api_key="lm-studio"):
         with urllib.request.urlopen(req, timeout=3) as response:
             if response.status == 200:
                 return True
-    except Exception:
+    except Exception:  # hygiene: allow the TCP probe below is the fallback for this probe
         pass
 
     # 2. Fallback: Check TCP connection to host:port
@@ -161,7 +161,7 @@ def check_llm_server(api_url, api_key="lm-studio"):
         port = parsed.port if parsed.port else (443 if parsed.scheme == 'https' else 80)
         with socket.create_connection((parsed.hostname, port), timeout=3):
             return True
-    except Exception:
+    except Exception:  # hygiene: allow both probes failed; the explicit ConnectionError below reports it
         pass
 
     raise ConnectionError(f"Could not connect to LLM server at {api_url}. Is it running?")
@@ -207,7 +207,7 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
 
                     try:
                         line = line.decode('utf-8').strip()
-                    except Exception:
+                    except Exception:  # hygiene: allow one undecodable stream line is skipped, not fatal
                         continue # Skip bad lines
 
                     if line.startswith("data: "):
@@ -224,7 +224,7 @@ def call_lm_studio(prompt, system_instruction, api_url="http://localhost:1234/v1
                         except json.JSONDecodeError:
                             # Log or ignore bad JSON chunks
                             continue
-                        except Exception:
+                        except Exception:  # hygiene: allow minor stream-parsing errors must not abort the reply
                             # Ignore other minor parsing errors
                             pass
 

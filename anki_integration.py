@@ -12,7 +12,7 @@ def check_anki_connection(port=5005):
     try:
         # Try a quick connection. Even a 404 means the server is up.
         opener = _get_no_proxy_opener()
-        with opener.open(url, timeout=1):
+        with opener.open(url, timeout=1):  # hygiene: allow this is an HTTP request, not a text-file open
             return True
     except urllib.error.HTTPError:
         # Server responded with an error (e.g. 404), so it is running.
@@ -27,7 +27,7 @@ def get_deck_names(log_callback=None):
         log_callback(f"Connecting to Anki at {url}...")
     try:
         opener = _get_no_proxy_opener()
-        with opener.open(url, timeout=2) as response:
+        with opener.open(url, timeout=2) as response:  # hygiene: allow this is an HTTP request, not a text-file open
             result = json.loads(response.read().decode('utf-8'))
             decks = result.get("decks", [])
             if log_callback:
@@ -62,7 +62,7 @@ def create_anki_deck(deck_name, qa_pairs, log_callback=None):
     
     try:
         opener = _get_no_proxy_opener()
-        with opener.open(req, timeout=10) as response:
+        with opener.open(req, timeout=10) as response:  # hygiene: allow this is an HTTP request, not a text-file open
             result = json.loads(response.read().decode('utf-8'))
             count = result.get("count", 0)
             if log_callback:
