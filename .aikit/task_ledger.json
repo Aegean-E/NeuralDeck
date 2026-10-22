@@ -1,12 +1,11 @@
 {
   "version": 1,
   "active_task": {
-    "task_id": "aikit-integration",
-    "last_phase": "phase 5",
-    "active_phase": 5,
-    "status": "completed",
-    "updated_at": 1792509556.1303027,
-    "completed_at": 1792509603.6632054
+    "task_id": "settings-io-hardening-v1",
+    "last_phase": "phase 4",
+    "active_phase": 4,
+    "status": "in_progress",
+    "updated_at": 1792683585.2401698
   },
   "checkpoints": [
     {
@@ -53,6 +52,92 @@
       "status": "completed",
       "timestamp": 1792509603.6632075,
       "timestamp_str": "2026-10-20 18:20:03"
+    },
+    {
+      "task_id": "settings-io-hardening-v1",
+      "phase": "phase 2",
+      "phase_num": 2,
+      "description": "[1/3] Add settings_io helpers with failing-first tests: env-aware config/log paths, crash-safe JSON read/write, and numeric setting coercion. [2/3] Wire the helpers into ui.py so config, session and log files no longer depend on CWD and Generate uses live, validated settings. [3/3] Record ADR-002, update README, and run the Phase 4 gate.",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792647665.5762951,
+      "timestamp_str": "2026-10-22 08:41:05",
+      "impact_assessment": {
+        "why": "README promises NEURALDECK_CONFIG and NEURALDECK_LOG but the code ignores them; config/session/log paths depend on the launch directory; config and session writes are non-atomic; invalid numeric settings can raise TclError and Generate silently uses stale context/concurrency values.",
+        "benefits": "Documented env overrides work, user data stays beside the app regardless of CWD, a crash cannot leave truncated JSON, and Generate applies the values visible in the Settings tab instead of the last saved config.",
+        "risks": "contract: config/session paths can move when env vars are set; dependency: none, stdlib only; concurrency: none, UI thread reads before worker starts; state: config.json and session_cache.json writes become temp+fsync+replace.",
+        "mitigation": "Add pure-helper unit tests first, keep old defaults when env vars are unset, and verify the full project gate and test suite before delivery."
+      }
+    },
+    {
+      "task_id": "settings-io-hardening-v1",
+      "phase": "phase 4",
+      "phase_num": 4,
+      "description": "[3/3] Delivered settings_io helpers and UI wiring: env-aware config/log paths, session beside config, atomic JSON writes, bounded numeric parsing, live Generate values. ADR-002 and README updated; codebase map regenerated. checklists: passed.",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792647882.4309597,
+      "timestamp_str": "2026-10-22 08:44:42"
+    },
+    {
+      "task_id": "settings-io-hardening-v1",
+      "phase": "phase 4",
+      "phase_num": 4,
+      "description": "[review fixes] Frozen-aware application dir, unique temp files with in-process write lock and bounded replace retries, POSIX mode preservation, nested log dirs, 4-space config indentation, float/temperature parsing, session read warnings. Tests 115 pass + 1 POSIX skip; checklists: passed.",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792648947.342722,
+      "timestamp_str": "2026-10-22 09:02:27"
+    },
+    {
+      "task_id": "settings-io-hardening-v1",
+      "phase": "phase 4",
+      "phase_num": 4,
+      "description": "[review fixes 2] Accepted config saves report failures; corrupt config/session files are quarantined; stale writer and ReplaceFileW temp files are cleaned at startup; Windows replacement preserves ACLs/attributes via ReplaceFileW with WinError 2/1175/1176/1177 retries; personal config untracked with config.example.json. Tests 123 pass + 1 platform skip; checklists: passed.",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792650187.8057768,
+      "timestamp_str": "2026-10-22 09:23:07"
+    },
+    {
+      "task_id": "settings-io-hardening-v1",
+      "phase": "phase 4",
+      "phase_num": 4,
+      "description": "[review fixes 3] Quarantine only malformed/wrong-shaped JSON; I/O-unreadable files stay and block saves. Config values normalized; invalid theme falls back. Session entries validated; structural failures quarantine and block overwrite. Added cross-process lock file, eliminated ReplaceFileW contention errors/leftovers. Docs/map synced. Tests 131 pass + 1 platform skip; checklists: passed.",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792665781.3772876,
+      "timestamp_str": "2026-10-22 13:43:01"
+    },
+    {
+      "task_id": "settings-io-hardening-v1",
+      "phase": "phase 4",
+      "phase_num": 4,
+      "description": "[release gate] Session restore failures now block close-time cache overwrite; theme allowlist validated against ttkbootstrap 2.2.3 (cerculean); Windows metadata guarantee qualified to NTFS; GUI smoke and documented PyInstaller one-file smoke both passed; complete change set staged. Tests 131 pass + 1 platform skip; checklists: passed.",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792673228.2237449,
+      "timestamp_str": "2026-10-22 15:47:08"
+    },
+    {
+      "task_id": "settings-io-hardening-v1",
+      "phase": "phase 4",
+      "phase_num": 4,
+      "description": "[release gate 2] Pinned runtime dependencies; exposed all 18 verified ttkbootstrap standard themes; added Clear All recovery for blocked session cache; documented persistent lock files and Windows copy; added requirements/example drift tests. GUI all-theme and config-save smoke passed; packaged one-file rebuilt from pinned deps and ran with log beside exe. Tests 132 pass + 1 platform skip; checklists: passed.",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792676403.702123,
+      "timestamp_str": "2026-10-22 16:40:03"
+    },
+    {
+      "task_id": "settings-io-hardening-v1",
+      "phase": "phase 4",
+      "phase_num": 4,
+      "description": "[release gate 3] Fully pinned transitive runtime dependencies; added explicit config recovery prompt that quarantines an unreadable config after consent; added automated theme-allowlist guard against installed ttkbootstrap; verified config/session recovery flows in GUI; rebuilt and ran final one-file executable from the pinned environment. Tests 132 pass + 2 prerequisite skips; checklists: passed.",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1792683585.2401698,
+      "timestamp_str": "2026-10-22 18:39:45"
     }
   ]
 }

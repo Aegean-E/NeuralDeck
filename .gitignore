@@ -2,9 +2,14 @@ __pycache__/
 *.pyc
 *.log
 # Runtime artifacts
+config.json
 failed_chunks_log.jsonl
 rejected_cards_log.jsonl
 session_cache.json
+*.corrupt_*
+.*.tmp
+.*.lock
+*~RF*.TMP
 # AIKit transient state
 .aikit/*.lock
 .aikit/*.bak

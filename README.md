@@ -76,11 +76,12 @@ NeuralDeck/
 ├── ui.py
 ├── document_processor.py
 ├── pipeline_utils.py
+├── settings_io.py
 ├── anki_integration.py
 ├── debug_anki.py
 ├── debug_llm.py
 ├── requirements.txt
-├── config.json
+├── config.example.json
 ├── banner.png
 └── LICENSE
 ```
@@ -154,6 +155,7 @@ The main interface provides a clean, intuitive workflow for generating flashcard
 git clone https://github.com/Aegean-E/NeuralDeck.git
 cd NeuralDeck
 pip install -r requirements.txt
+cp config.example.json config.json   # optional; use `copy` on Windows cmd
 
 # 2. Install Anki Bridge (see Installation section)
 
@@ -289,12 +291,12 @@ Customize every aspect of the card generation process from the Settings panel. C
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| **Theme** | Visual theme (darkly, flatly, litera, etc.) | `darkly` |
+| **Theme** | Any of the 18 standard `ttkbootstrap` themes | `darkly` |
 | **API URL** | Local LLM server endpoint | `http://localhost:1234/v1/chat/completions` |
 | **API Key** | Server authentication key | `lm-studio` |
 | **Model Name** | Model identifier | `local-model` |
 | **Temperature** | AI creativity (0.0=deterministic, 1.0=creative) | `0.7` |
-| **Max Tokens** | Maximum tokens per response | `2048` |
+| **Max Tokens** | Maximum tokens per response | `-1` (auto) |
 | **Card Density** | Detail level: Low/Medium/High | `Medium` |
 | **Concurrency** | Parallel threads (auto-limited to CPU cores) | `1` |
 | **Filter 'Yes/No'** | Remove simple Yes/No questions | `True` |
@@ -308,8 +310,10 @@ Customize every aspect of the card generation process from the Settings panel. C
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `NEURALDECK_CONFIG` | Custom config file path | `config.json` |
-| `NEURALDECK_LOG` | Log file location | `session.log` |
+| `NEURALDECK_CONFIG` | Custom config file path | `config.json` beside the app |
+| `NEURALDECK_LOG` | Log file location | `session.log` beside the app |
+
+By default, `config.json`, `session_cache.json` and `session.log` live beside the application, so launching NeuralDeck from any working directory keeps one set of settings. In a frozen one-file build they live beside the executable, not in the executable's temporary extraction folder. A relative environment override is resolved against the application directory; an absolute override is used as given, and nested log directories are created automatically. The session cache is stored beside the resolved config file. Config and session writes use a hidden lock sibling, a unique temporary file, `fsync` and an atomic replace, so an interrupted process cannot leave truncated JSON; the `.lock` siblings are kept for cross-process coordination and ignored by Git; on POSIX, new files are created with `0600` and an existing mode is preserved. `config.json` is personal and untracked; start from `config.example.json`. Malformed or wrong-shaped JSON is moved to a `.corrupt_<timestamp>` sibling instead of being overwritten; a file that cannot be read because of an I/O error is left in place and blocks subsequent saves until it is removed or the application is restarted. Temporary files older than one day are cleaned at startup. On Windows NTFS, the replacement preserves the existing file's ACLs and attributes; filesystems without `ReplaceFileW` support fall back to `os.replace` without that metadata guarantee.
 
 ---
 
@@ -323,6 +327,7 @@ NeuralDeck/
 ├── ui.py                  # Main GUI (ttkbootstrap)
 ├── document_processor.py  # Document parsing & card generation
 ├── pipeline_utils.py      # Utilities (stats, validation, logging)
+├── settings_io.py         # Settings paths, atomic JSON persistence, numeric parsing
 ├── anki_integration.py   # HTTP client for Anki bridge
 ├── anki_addon/           # Anki-side add-on
 │   ├── __init__.py       # Bridge server (port 5005)
@@ -439,11 +444,13 @@ python -m pytest tests --cov=. --cov-report=html
 | Anki Addon | `test_anki_addon_logic.py`, `test_anki_addon_media.py` | ✓ |
 | Document Processor | `test_document_processor.py`, `test_document_processor_extra.py` | ✓ |
 | Pipeline Utils | `test_pipeline_utils.py` | ✓ |
+| Settings I/O | `test_settings_io.py` | ✓ |
+| Theme Allowlist | `test_ui_themes.py` | ✓ |
 | Full Pipeline | `test_pipeline.py` | ✓ |
 | Failure Isolation | `test_failure_isolation.py` | ✓ |
 | Deterministic Mode | `test_deterministic.py` | ✓ |
 
-**Total: 84 tests**
+**Total: 134 tests** (platform- and dependency-specific tests are skipped when their prerequisite is absent)
 
 ---
 
@@ -510,7 +517,7 @@ python -m pytest tests --cov=. --cov-report=html
 
 ```bash
 # Install PyInstaller
-pip install pyinstaller
+pip install pyinstaller==6.22.3
 
 # Build executable
 pyinstaller --noconsole --onefile --name "NeuralDeck" main.py
@@ -539,9 +546,9 @@ The executable is created at `dist/NeuralDeck.exe` on Windows.
 | Data | Location | Encryption |
 |------|----------|------------|
 | Documents | RAM only | N/A |
-| Generated Cards | `session_cache.json` | None |
-| Settings | `config.json` | None |
-| Logs | `session.log` | None |
+| Generated Cards | `session_cache.json` beside the resolved config | None |
+| Settings | `config.json` beside the app, or `NEURALDECK_CONFIG` | None |
+| Logs | `session.log` beside the app, or `NEURALDECK_LOG` | None |
 
 **Recommendation**: Clear `session_cache.json` after syncing sensitive content.
 

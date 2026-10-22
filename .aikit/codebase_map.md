@@ -6,11 +6,11 @@
 ---
 
 ## 📊 Codebase Metrics
-- **Total Python Modules**: `20`
-- **Total Classes**: `34`
-- **Total Top-Level Functions**: `24`
-- **Total Class Methods**: `160`
-- **Total Source Lines**: `3789`
+- **Total Python Modules**: `23`
+- **Total Classes**: `47`
+- **Total Top-Level Functions**: `40`
+- **Total Class Methods**: `217`
+- **Total Source Lines**: `4740`
 
 ---
 
@@ -115,6 +115,31 @@
 - `class ResourceGuard`
   - Method `.check_file_size(filepath)`
   - Method `.check_chunk_count(count)`
+
+---
+
+### [`settings_io.py`](settings_io.py)
+> *Environment-aware paths and crash-safe persistence for NeuralDeck settings.*
+
+**Size**: `378` lines (`12486` bytes)
+
+**Functions:**
+- `def application_dir(module_file, frozen, executable)` - *Return the persistent application directory, including for frozen builds.*
+- `def resolve_app_path(default_name, env_var)` - *Resolve a file beside the application unless an environment variable overrides it.*
+- `def ensure_parent_directory(path)` - *Create the parent directory for a file path when it does not exist yet.*
+- `def quarantine_corrupt_file(path)` - *Move an unreadable state file aside so defaults never overwrite its evidence.*
+- `def _report_read_error(path, exc, on_error, quarantine_on_error)`
+- `def read_json_file(path, default, on_error, quarantine_on_error)` - *Read JSON from path, returning default when the file is missing, malformed or mistyped.*
+- `def cleanup_stale_temp_files(path, max_age_seconds, now)` - *Remove crashed temporary siblings older than the age threshold.*
+- `def _replace_once(source, target)` - *Replace target while preserving Windows ACLs and attributes when possible.*
+- `def _replace_with_retries(source, target, attempts, delay)` - *Retry a replace that briefly collides with another writer.*
+- `def _cross_process_lock(target)` - *Serialize writes across processes so ReplaceFileW is not used concurrently.*
+- `def write_json_file(path, data, indent)` - *Write JSON atomically so a crash cannot leave a truncated settings file.*
+- `def _write_json_file(path, data, indent)`
+- `def parse_int_setting(raw_value, default, minimum, maximum)` - *Parse a numeric entry, clamping it to the declared range and falling back to default.*
+- `def parse_float_setting(raw_value, default, minimum, maximum)` - *Parse a decimal entry, rejecting non-finite values and clamping it to the range.*
+- `def normalize_config(raw)` - *Normalize persisted config values to the documented types and ranges.*
+- `def normalize_session_data(data)` - *Return safe card dictionaries, or None when the session shape is unusable.*
 
 ---
 
@@ -334,8 +359,90 @@
 
 ---
 
+### [`tests/test_settings_io.py`](tests/test_settings_io.py)
+**Size**: `433` lines (`18842` bytes)
+
+**Classes:**
+- `class TestApplicationDir`
+  - Method `.test_source_checkout_uses_the_module_directory()`
+  - Method `.test_frozen_build_uses_the_executable_directory()`
+  - Method `.test_frozen_build_falls_back_when_no_executable_is_available()`
+- `class TestResolveAppPath`
+  - Method `.test_defaults_to_the_application_directory()`
+  - Method `.test_honours_an_absolute_environment_override()`
+  - Method `.test_resolves_a_relative_override_against_the_application_directory()`
+  - Method `.test_an_empty_override_falls_back_to_the_default()`
+- `class TestQuarantineCorruptFile`
+  - Method `.setUp()`
+  - Method `.test_moves_a_corrupt_file_and_preserves_its_content()`
+  - Method `.test_returns_none_when_the_file_is_missing()`
+  - Method `.test_read_quarantines_malformed_input_when_requested()`
+  - Method `.test_read_keeps_a_valid_file_when_quarantine_is_requested()`
+- `class TestCleanupStaleTempFiles`
+  - Method `.setUp()`
+  - Method `.test_removes_only_old_matching_temp_files()`
+  - Method `.test_returns_zero_when_the_parent_does_not_exist()`
+- `class TestReadJsonFile`
+  - Method `.setUp()`
+  - Method `.test_returns_the_default_when_the_file_is_missing()`
+  - Method `.test_returns_the_default_when_the_file_is_malformed()`
+  - Method `.test_returns_the_default_when_the_json_type_does_not_match()`
+  - Method `.test_returns_parsed_content_for_a_matching_type()`
+  - Method `.test_a_transient_open_error_does_not_quarantine_a_valid_file()`
+- `class TestNormalizeConfig`
+  - Method `.test_wrong_types_fall_back_to_documented_defaults()`
+  - Method `.test_numeric_strings_are_parsed_and_clamped()`
+  - Method `.test_density_is_restricted_and_deck_names_are_strings()`
+  - Method `.test_unknown_keys_are_preserved()`
+- `class TestNormalizeSessionData`
+  - Method `.test_valid_cards_are_normalized()`
+  - Method `.test_optional_fields_get_safe_defaults()`
+  - Method `.test_non_list_or_non_object_entries_are_rejected()`
+- `class TestWriteJsonFile`
+  - Method `.setUp()`
+  - Method `._leftovers()`
+  - Method `.test_creates_parent_directories_and_round_trips()`
+  - Method `.test_leaves_no_temporary_file_behind()`
+  - Method `.test_replaces_existing_content_in_one_step()`
+  - Method `.test_honours_the_requested_indent()`
+  - Method `.test_rejects_a_directory_target_without_leaving_temporary_files()`
+  - Method `.test_preserves_an_existing_restrictive_mode()`
+  - Method `.test_preserves_windows_file_attributes()`
+  - Method `.test_removes_the_temp_file_when_serialization_fails()`
+  - Method `.test_recovers_from_a_transient_replace_failure()`
+  - Method `.test_failed_replace_retries_and_keeps_the_old_file()`
+  - Method `.test_concurrent_writers_do_not_share_a_temp_file()`
+- `class TestEnsureParentDirectory`
+  - Method `.test_creates_a_nested_parent_directory()`
+- `class TestParseIntSetting`
+  - Method `.test_parses_valid_integers()`
+  - Method `.test_accepts_surrounding_whitespace()`
+  - Method `.test_returns_the_default_for_blank_or_invalid_input()`
+  - Method `.test_clamps_to_the_declared_range()`
+  - Method `.test_keeps_in_range_values_untouched()`
+- `class TestParseFloatSetting`
+  - Method `.test_parses_valid_floats()`
+  - Method `.test_accepts_surrounding_whitespace()`
+  - Method `.test_returns_the_default_for_blank_or_invalid_input()`
+  - Method `.test_clamps_to_the_declared_range()`
+  - Method `.test_rejects_non_finite_values()`
+- `class TestExampleConfig`
+  - Method `.test_example_config_matches_the_documented_defaults()`
+  - Method `.test_runtime_requirements_are_pinned()`
+
+---
+
+### [`tests/test_ui_themes.py`](tests/test_ui_themes.py)
+**Size**: `21` lines (`553` bytes)
+
+**Classes:**
+- `class TestThemeAllowlist`
+  - Method `.test_allowlist_matches_the_installed_ttkbootstrap_themes()`
+
+---
+
 ### [`ui.py`](ui.py)
-**Size**: `772` lines (`36462` bytes)
+**Size**: `891` lines (`41777` bytes)
 
 **Classes:**
 - `class TextWidgetHandler` - *Custom logging handler that writes to a Tkinter ScrolledText widget thread-safely.*
@@ -353,6 +460,8 @@
   - Method `.setup_main_tab()`
   - Method `.setup_settings_tab()`
   - Method `.load_config()`
+  - Method `._read_int(var, default, minimum, maximum)` - *Read a numeric Tk variable without letting an empty field crash the UI.*
+  - Method `._read_float(var, default, minimum, maximum)` - *Read a decimal Tk variable without letting an empty field crash the UI.*
   - Method `.save_settings_ui()`
   - Method `.save_config()`
   - Method `.apply_theme(event)`

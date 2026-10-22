@@ -2,19 +2,36 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from ttkbootstrap.widgets.scrolled import ScrolledFrame
 from ttkbootstrap.widgets import ToolTip
-from tkinter import filedialog, messagebox
+from tkinter import TclError, filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 import threading
 import os
 import time
-import json
 import logging
 from document_processor import extract_text_from_document, generate_qa_pairs
 from anki_integration import create_anki_deck, get_deck_names, check_anki_connection
 from pipeline_utils import PipelineStats, ResourceGuard
+from settings_io import (
+    cleanup_stale_temp_files,
+    ensure_parent_directory,
+    normalize_config,
+    normalize_session_data,
+    parse_float_setting,
+    parse_int_setting,
+    quarantine_corrupt_file,
+    read_json_file,
+    resolve_app_path,
+    write_json_file,
+)
 
-CONFIG_FILE = "config.json"
-SESSION_FILE = "session_cache.json"
+CONFIG_FILE = resolve_app_path("config.json", "NEURALDECK_CONFIG")
+SESSION_FILE = CONFIG_FILE.parent / "session_cache.json"
+LOG_FILE = resolve_app_path("session.log", "NEURALDECK_LOG")
+THEMES = (
+    "cerculean", "cosmo", "cyborg", "darkly", "flatly", "journal", "litera", "lumen",
+    "minty", "morph", "pulse", "sandstone", "simplex", "solar", "superhero", "united",
+    "vapor", "yeti",
+)
 
 class TextWidgetHandler(logging.Handler):
     """Custom logging handler that writes to a Tkinter ScrolledText widget thread-safely."""
@@ -108,8 +125,13 @@ class CardReviewRow(ttk.Frame):
 
 class AnkiGeneratorUI(ttk.Window):
     def __init__(self):
+        for state_file in (CONFIG_FILE, SESSION_FILE, LOG_FILE):
+            cleanup_stale_temp_files(state_file)
         self.load_config()
         theme = self.config.get("theme", "darkly")
+        if theme not in THEMES:
+            theme = "darkly"
+            self.config["theme"] = theme
         super().__init__(themename=theme)
         
         self.title("NeuralDeck")
@@ -124,6 +146,7 @@ class AnkiGeneratorUI(ttk.Window):
         self.source_text = ""
         self.stop_requested = False
         self._session_loaded = False
+        self.session_write_blocked = False
         
         # Tabs
         self.notebook = ttk.Notebook(self)
@@ -151,7 +174,8 @@ class AnkiGeneratorUI(ttk.Window):
         if not self.logger.handlers:
             # File Handler
             try:
-                file_handler = logging.FileHandler("session.log", encoding="utf-8")
+                ensure_parent_directory(LOG_FILE)
+                file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
                 file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="[%Y-%m-%d %H:%M:%S]"))
                 self.logger.addHandler(file_handler)
             except Exception:  # hygiene: allow read-only session.log must not stop the UI
@@ -277,7 +301,7 @@ class AnkiGeneratorUI(ttk.Window):
         ttk.Label(theme_frame, text="Theme:").pack(side=LEFT, padx=5)
         current_theme = self.config.get("theme", "darkly")
         self.theme_var = ttk.StringVar(value=current_theme)
-        themes = ["cyborg", "solar", "darkly", "flatly", "cerulean", "superhero", "journal", "morph"]
+        themes = list(THEMES)
         theme_combo = ttk.Combobox(theme_frame, textvariable=self.theme_var, values=themes, state="readonly")
         theme_combo.pack(side=LEFT, padx=5)
         theme_combo.bind("<<ComboboxSelected>>", self.apply_theme)
@@ -373,24 +397,46 @@ class AnkiGeneratorUI(ttk.Window):
         ttk.Button(container, text="Save Settings", command=self.save_settings_ui, bootstyle="primary").pack(pady=20, anchor=E)
 
     def load_config(self):
-        self.config = {}
-        if os.path.exists(CONFIG_FILE):
-            try:
-                with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                    self.config = json.load(f)
-            except:  # hygiene: allow invalid config falls back to defaults
-                pass
+        errors = []
+        raw_config = read_json_file(
+            CONFIG_FILE,
+            {},
+            on_error=errors.append,
+            quarantine_on_error=True,
+        )
+        self.config_write_blocked = bool(errors and CONFIG_FILE.exists())
+        self.config = normalize_config(raw_config)
     
+    def _read_int(self, var, default, minimum=None, maximum=None):
+        """Read a numeric Tk variable without letting an empty field crash the UI."""
+        try:
+            raw_value = var.get()
+        except TclError:  # hygiene: allow an empty numeric field is reported as its default
+            raw_value = ""
+        return parse_int_setting(raw_value, default, minimum, maximum)
+
+    def _read_float(self, var, default, minimum=None, maximum=None):
+        """Read a decimal Tk variable without letting an empty field crash the UI."""
+        try:
+            raw_value = var.get()
+        except TclError:  # hygiene: allow an empty decimal field is reported as its default
+            raw_value = ""
+        return parse_float_setting(raw_value, default, minimum, maximum)
+
     def save_settings_ui(self):
         self.config["theme"] = self.theme_var.get()
         self.config["language"] = self.lang_var.get()
         self.config["api_url"] = self.api_url_var.get()
         self.config["api_key"] = self.api_key_var.get()
         self.config["model"] = self.model_var.get()
-        self.config["temperature"] = self.temp_var.get()
-        self.config["max_tokens"] = self.tokens_var.get()
-        self.config["context_window"] = self.ctx_var.get()
-        self.config["concurrency"] = self.concurrency_var.get()
+        self.config["temperature"] = self._read_float(self.temp_var, 0.7, 0.0, 1.0)
+        self.config["max_tokens"] = self._read_int(self.tokens_var, -1)
+        self.config["context_window"] = self._read_int(self.ctx_var, 4096, 1000, 131072)
+        self.config["concurrency"] = self._read_int(self.concurrency_var, 1, 1, 10)
+        self.temp_var.set(self.config["temperature"])
+        self.tokens_var.set(self.config["max_tokens"])
+        self.ctx_var.set(self.config["context_window"])
+        self.concurrency_var.set(self.config["concurrency"])
         self.config["card_density"] = self.density_var.get()
         self.config["filter_yes_no"] = self.filter_yes_no_var.get()
         self.config["exclude_trivia"] = self.exclude_trivia_var.get()
@@ -404,15 +450,46 @@ class AnkiGeneratorUI(ttk.Window):
         level = logging.DEBUG if self.config["debug_mode"] else logging.INFO
         self.logger.setLevel(level)
 
-        self.save_config()
-        messagebox.showinfo("Settings", "Settings saved successfully.")
+        if self.save_config():
+            messagebox.showinfo("Settings", "Settings saved successfully.")
+        elif getattr(self, 'config_write_blocked', False) and CONFIG_FILE.exists():
+            if messagebox.askyesno(
+                "Settings",
+                "The settings file is unreadable. Move it aside and save the current settings?",
+            ):
+                moved = quarantine_corrupt_file(CONFIG_FILE)
+                if moved is not None:
+                    self.config_write_blocked = False
+                    self.logger.warning(f"Unreadable settings moved to {moved}.")
+                    if self.save_config():
+                        messagebox.showinfo("Settings", "Settings saved successfully.")
+                    else:
+                        messagebox.showerror("Settings", "Settings could not be saved. See the log for details.")
+                else:
+                    messagebox.showerror("Settings", "The settings file could not be moved aside. See the log for details.")
+            else:
+                messagebox.showerror("Settings", "Settings were not saved. See the log for details.")
+        else:
+            messagebox.showerror("Settings", "Settings could not be saved. See the log for details.")
 
     def save_config(self):
+        if getattr(self, 'config_write_blocked', False):
+            if CONFIG_FILE.exists():
+                if hasattr(self, 'logger'):
+                    self.logger.error("Settings file is unreadable and was left untouched; refusing to overwrite it.")
+                return False
+            self.config_write_blocked = False
+
         # Update config object from vars if they exist (for auto-saves like language)
         if hasattr(self, 'lang_var'): self.config["language"] = self.lang_var.get()
-        
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(self.config, f, indent=4, ensure_ascii=False)
+
+        try:
+            write_json_file(CONFIG_FILE, self.config, indent=4)
+            return True
+        except (OSError, TypeError, ValueError) as exc:
+            if hasattr(self, 'logger'):
+                self.logger.error(f"Failed to save settings: {exc}")
+            return False
 
     def apply_theme(self, event):
         t = self.theme_var.get()
@@ -520,10 +597,10 @@ class AnkiGeneratorUI(ttk.Window):
         api_url = self.api_url_var.get()
         api_key = self.api_key_var.get()
         model = self.model_var.get()
-        temperature = self.temp_var.get()
-        max_tokens = self.tokens_var.get()
-        context_window = self.config.get("context_window", 4096)
-        concurrency = self.config.get("concurrency", 1)
+        temperature = self._read_float(self.temp_var, 0.7, 0.0, 1.0)
+        max_tokens = self._read_int(self.tokens_var, -1)  # aikit:allow-secret default token limit, not a credential
+        context_window = self._read_int(self.ctx_var, 4096, 1000, 131072)
+        concurrency = self._read_int(self.concurrency_var, 1, 1, 10)
         card_density = self.density_var.get()
         prompt_style = self.config.get("prompt_style", "")
         filter_yes_no = self.filter_yes_no_var.get()
@@ -649,6 +726,12 @@ class AnkiGeneratorUI(ttk.Window):
             
     def save_session(self):
         """Saves the current state of generated cards to a JSON file."""
+        if getattr(self, 'session_write_blocked', False):
+            if SESSION_FILE.exists():
+                self.logger.warning("Session cache is unreadable and was left untouched; use Clear All to discard it.")
+                return
+            self.session_write_blocked = False
+
         data = []
         for row in self.card_rows:
             row_data = row.get_data()
@@ -657,26 +740,46 @@ class AnkiGeneratorUI(ttk.Window):
             data.append(row_data)
         
         try:
-            with open(SESSION_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            write_json_file(SESSION_FILE, data)
             self.logger.info(f"Session saved. {len(data)} cards cached.")
         except Exception as e:
             self.logger.error(f"Failed to save session: {e}")
 
     def load_session(self):
         """Restores cards from the session cache file."""
-        if not os.path.exists(SESSION_FILE):
+        if not SESSION_FILE.exists():
             return
-            
+
         try:
-            with open(SESSION_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                
+            read_failed = False
+
+            def note_read_error(exc):
+                nonlocal read_failed
+                read_failed = True
+                self.logger.warning(f"Could not read session cache: {exc}")
+
+            raw_data = read_json_file(
+                SESSION_FILE,
+                [],
+                on_error=note_read_error,
+                quarantine_on_error=True,
+            )
+            if read_failed and SESSION_FILE.exists():
+                self.session_write_blocked = True
+                return
+            self.session_write_blocked = False
+
+            data = normalize_session_data(raw_data)
+            if data is None:
+                quarantine_corrupt_file(SESSION_FILE)
+                self.session_write_blocked = SESSION_FILE.exists()
+                self.logger.warning("Session cache had an unusable shape and was not loaded.")
+                return
             if not data:
                 return
 
             self.logger.info(f"Restoring previous session ({len(data)} cards)...")
-            
+
             for item in data:
                 # Create row with restored data
                 row = CardReviewRow(self.review_frame, item.get('question', ''), item.get('answer', ''), item.get('deck', 'Default'), self.available_decks, quote=item.get('quote', ''), on_remove=self.remove_card_row)
@@ -688,6 +791,7 @@ class AnkiGeneratorUI(ttk.Window):
             if self.card_rows:
                 self.sync_btn.config(state="normal")
         except Exception as e:
+            self.session_write_blocked = SESSION_FILE.exists()
             self.logger.error(f"Failed to load session: {e}")
 
     def stop_processing(self):
@@ -704,10 +808,25 @@ class AnkiGeneratorUI(ttk.Window):
         os._exit(0)
 
     def clear_all_cards(self):
-        if self.card_rows and messagebox.askyesno("Confirm", "Clear all generated cards?"):
-            for row in self.card_rows:
-                row.destroy()
-            self.card_rows = []
+        blocked = getattr(self, 'session_write_blocked', False)
+        if not self.card_rows and not blocked:
+            return
+        prompt = "Clear all generated cards and cached session data?" if blocked else "Clear all generated cards?"
+        if not messagebox.askyesno("Confirm", prompt):
+            return
+
+        for row in self.card_rows:
+            row.destroy()
+        self.card_rows = []
+
+        if blocked:
+            try:
+                SESSION_FILE.unlink(missing_ok=True)
+            except OSError as exc:
+                self.logger.error(f"Could not discard the blocked session cache: {exc}")
+            else:
+                self.session_write_blocked = False
+                self.logger.info("Discarded the blocked session cache.")
             
     def toggle_all_approvals(self, state):
         for row in self.card_rows:
