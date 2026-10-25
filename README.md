@@ -69,6 +69,7 @@
 NeuralDeck/
 ├── README.md
 ├── .gitignore
+├── COMMERCIAL.md
 ├── .aikit/                  <- project memory: project, guidelines, decisions, ledger, map
 ├── .github/
 ├── anki_addon/              <- Anki bridge add-on
