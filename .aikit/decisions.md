@@ -32,3 +32,9 @@ contract, a dependency, a data format or the architecture; IDs are consecutive a
 - **Context**: The tracked `config.json` mixed application defaults with personal deck names, language and an API-key field. Every settings save dirtied the repository, and a user-customized key could be committed by accident.
 - **Decision**: Untrack `config.json`, ignore it, and commit `config.example.json` with the documented defaults and an empty `selected_decks` list. A fresh checkout may copy the example, while the UI creates `config.json` on the first save if it is absent.
 - **Consequences**: Personal settings no longer appear in commits or on the remote; the default configuration remains documented and testable; an existing local `config.json` keeps working because untracking does not delete the working file.
+
+## Licensing migration (agpl-final)
+
+- New versions use the Aegean License 1.1 (AL-1.1); versions up to and including `agpl-final` remain under GNU AGPL-3.0.
+- Rights holder: AegeanWorks; commercial use under ACL-1.0.
+- Counsel review of the 1.1 texts remains pending.

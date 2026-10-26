@@ -1,6 +1,6 @@
 # NeuralDeck 0.2
 
-[![AIKit Integrated](https://img.shields.io/badge/AIKit-integrated-6f42c1)](https://github.com/Aegean-E/AIKit)
+[![AIKit Integrated](https://img.shields.io/badge/AIKit-integrated-6f42c1)](https://github.com/AegeanWorks/AIKit)
 
 <p align="center">
   <img src="https://github.com/Aegean-E/NeuralDeck/blob/main/banner.png?raw=true" alt="NeuralDeck Banner" width="1200">
@@ -86,7 +86,9 @@ NeuralDeck/
 ├── requirements.txt
 ├── config.example.json
 ├── banner.png
-└── LICENSE
+├── LICENSE
+├── LICENSES/                 <- REUSE license texts
+└── REUSE.toml                <- Machine-readable SPDX metadata
 ```
 
 ---
@@ -599,12 +601,14 @@ python -m pytest tests/ -v
 
 ---
 
-## License
-
-This project is licensed under the **GNU Affero General Public License v3**. See the LICENSE file for details.
-
 ---
 
 <p align="center">
   <sub>Built with ❤️ for learners everywhere</sub>
 </p>
+
+> **License history:** versions up to and including `agpl-final` remain available under GNU AGPL-3.0.
+
+## 📜 License
+
+Free for personal use under the Aegean License 1.1 (AL-1.1); see [LICENSE](LICENSE). Any commercial use needs the Aegean Commercial License 1.0 (ACL-1.0); see [COMMERCIAL.md](COMMERCIAL.md).
