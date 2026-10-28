@@ -1,7 +1,7 @@
 # NeuralDeck 0.2
 
 <!-- aegean:media:start -->
-<p align="center"><img src="assets/logo.png" alt="NeuralDeck logo" width="96" height="96"></p>
+<p align="center"><img src="assets/logo.jpg" alt="NeuralDeck logo" width="96" height="96"></p>
 <p align="center"><img src="assets/social-preview.png" alt="NeuralDeck social preview" width="100%"></p>
 <!-- aegean:media:end -->
 
