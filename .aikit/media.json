@@ -31,14 +31,13 @@
       "path": "assets/social-preview.png",
       "status": "approved",
       "commit": "",
-      "generated_at": "2026-10-28T17:40:40",
+      "generated_at": "2026-10-28T18:26:59",
       "review": {
         "status": "approved",
-        "reviewer": "subagent:vision-review",
-        "method": "vision",
-        "notes": "Neural Deck\nE D U C A T I O N",
-        "score": 91,
-        "reviewed_at": "2026-10-28T17:52:09"
+        "reviewer": "human:user",
+        "method": "human",
+        "notes": "The project's pre-existing banner was preferred by the user; it was moved to the current social-preview asset name.",
+        "reviewed_at": "2026-10-28T18:26:59"
       }
     }
   },

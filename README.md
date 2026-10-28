@@ -1,14 +1,13 @@
 # NeuralDeck 0.2
 
 <!-- aegean:media:start -->
-<p align="center"><img src="assets/logo.jpg" alt="NeuralDeck logo" width="96" height="96"></p>
 <p align="center"><img src="assets/social-preview.png" alt="NeuralDeck social preview" width="100%"></p>
+*Brand assets are generated and may not fully represent the project scope.*
 <!-- aegean:media:end -->
 
 [![AIKit Integrated](https://img.shields.io/badge/AIKit-integrated-6f42c1)](https://github.com/AegeanWorks/AIKit)
 
 <p align="center">
-  <img src="https://github.com/Aegean-E/NeuralDeck/blob/main/banner.png?raw=true" alt="NeuralDeck Banner" width="1200">
 </p>
 
 <p align="center">
