@@ -13,6 +13,9 @@
   "ui_source": "detected",
   "topics": [
     "aikit",
+    "source-available",
+    "aegean-license",
+    "commercial-license",
     "anki",
     "anki-addon",
     "desktop-app",
@@ -28,10 +31,7 @@
     "docx-processing",
     "pdf-processing",
     "text-chunking",
-    "source-available",
-    "aegeanworks",
-    "user-interface",
-    "education"
+    "aegeanworks"
   ],
   "topics_source": "ai:kilo:2026-10-27",
   "topics_reviewed_at": "2026-10-28",
@@ -41,5 +41,10 @@
   ],
   "topics_choice_round3": [
     "education"
+  ],
+  "license_topics": [
+    "source-available",
+    "aegean-license",
+    "commercial-license"
   ]
 }
