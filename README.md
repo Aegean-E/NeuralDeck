@@ -89,7 +89,6 @@ NeuralDeck/
 ├── debug_llm.py
 ├── requirements.txt
 ├── config.example.json
-├── banner.png
 ├── LICENSE
 ├── LICENSES/                 <- REUSE license texts
 └── REUSE.toml                <- Machine-readable SPDX metadata
