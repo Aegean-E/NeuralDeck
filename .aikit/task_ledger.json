@@ -15,36 +15,6 @@
       "task_id": "settings-io-hardening-v1",
       "phase": "phase 4",
       "phase_num": 4,
-      "description": "[3/3] Delivered settings_io helpers and UI wiring: env-aware config/log paths, session beside config, atomic JSON writes, bounded numeric parsing, live Generate values. ADR-002 and README updated; codebase map regenerated. checklists: passed.",
-      "files_affected": [],
-      "status": "in_progress",
-      "timestamp": 1792647882.4309597,
-      "timestamp_str": "2026-10-22 08:44:42"
-    },
-    {
-      "task_id": "settings-io-hardening-v1",
-      "phase": "phase 4",
-      "phase_num": 4,
-      "description": "[review fixes] Frozen-aware application dir, unique temp files with in-process write lock and bounded replace retries, POSIX mode preservation, nested log dirs, 4-space config indentation, float/temperature parsing, session read warnings. Tests 115 pass + 1 POSIX skip; checklists: passed.",
-      "files_affected": [],
-      "status": "in_progress",
-      "timestamp": 1792648947.342722,
-      "timestamp_str": "2026-10-22 09:02:27"
-    },
-    {
-      "task_id": "settings-io-hardening-v1",
-      "phase": "phase 4",
-      "phase_num": 4,
-      "description": "[review fixes 2] Accepted config saves report failures; corrupt config/session files are quarantined; stale writer and ReplaceFileW temp files are cleaned at startup; Windows replacement preserves ACLs/attributes via ReplaceFileW with WinError 2/1175/1176/1177 retries; personal config untracked with config.example.json. Tests 123 pass + 1 platform skip; checklists: passed.",
-      "files_affected": [],
-      "status": "in_progress",
-      "timestamp": 1792650187.8057768,
-      "timestamp_str": "2026-10-22 09:23:07"
-    },
-    {
-      "task_id": "settings-io-hardening-v1",
-      "phase": "phase 4",
-      "phase_num": 4,
       "description": "[review fixes 3] Quarantine only malformed/wrong-shaped JSON; I/O-unreadable files stay and block saves. Config values normalized; invalid theme falls back. Session entries validated; structural failures quarantine and block overwrite. Added cross-process lock file, eliminated ReplaceFileW contention errors/leftovers. Docs/map synced. Tests 131 pass + 1 platform skip; checklists: passed.",
       "files_affected": [],
       "status": "in_progress",
@@ -89,86 +59,6 @@
       "status": "completed",
       "timestamp": 1792691355.7719853,
       "timestamp_str": "2026-10-22 20:49:15"
-    },
-    {
-      "task_id": "reforge:run-1",
-      "phase": "reforge stage 7",
-      "phase_num": 3,
-      "description": "Reforge stage 7: window 21, 3 commit(s), 10 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
-      "files_affected": [],
-      "status": "in_progress",
-      "timestamp": 1793291875.0597558,
-      "timestamp_str": "2026-10-29 19:37:55",
-      "agent": "opencode"
-    },
-    {
-      "task_id": "reforge:run-1",
-      "phase": "reforge stage 8",
-      "phase_num": 3,
-      "description": "Reforge stage 8: window 24, 3 commit(s), 12 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
-      "files_affected": [],
-      "status": "in_progress",
-      "timestamp": 1793292166.6730356,
-      "timestamp_str": "2026-10-29 19:42:46",
-      "agent": "opencode"
-    },
-    {
-      "task_id": "reforge:run-1",
-      "phase": "reforge stage 9",
-      "phase_num": 3,
-      "description": "Reforge stage 9: window 27, 3 commit(s), 9 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
-      "files_affected": [],
-      "status": "in_progress",
-      "timestamp": 1793292248.723453,
-      "timestamp_str": "2026-10-29 19:44:08",
-      "agent": "opencode"
-    },
-    {
-      "task_id": "reforge:run-1",
-      "phase": "reforge stage 10",
-      "phase_num": 3,
-      "description": "Reforge stage 10: window 30, 3 commit(s), 6 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired, 2 binary not analysed",
-      "files_affected": [
-        "screenshots/ui_main.png",
-        "screenshots/ui_settings.png"
-      ],
-      "status": "in_progress",
-      "timestamp": 1793292395.2221973,
-      "timestamp_str": "2026-10-29 19:46:35",
-      "agent": "opencode"
-    },
-    {
-      "task_id": "reforge:run-1",
-      "phase": "reforge stage 11",
-      "phase_num": 3,
-      "description": "Reforge stage 11: window 33, 3 commit(s), 2 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
-      "files_affected": [],
-      "status": "in_progress",
-      "timestamp": 1793292532.2175148,
-      "timestamp_str": "2026-10-29 19:48:52",
-      "agent": "opencode"
-    },
-    {
-      "task_id": "reforge:run-1",
-      "phase": "reforge stage 12",
-      "phase_num": 3,
-      "description": "Reforge stage 12: window 36, 3 commit(s), 8 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
-      "files_affected": [],
-      "status": "in_progress",
-      "timestamp": 1793292563.2177553,
-      "timestamp_str": "2026-10-29 19:49:23",
-      "agent": "opencode"
-    },
-    {
-      "task_id": "reforge:run-1",
-      "phase": "reforge stage 13",
-      "phase_num": 3,
-      "description": "Reforge stage 13: window 39, 3 commit(s), 4 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
-      "files_affected": [],
-      "status": "in_progress",
-      "timestamp": 1793292642.5349667,
-      "timestamp_str": "2026-10-29 19:50:42",
-      "agent": "opencode"
     },
     {
       "task_id": "reforge:run-1",
@@ -229,6 +119,129 @@
       "timestamp": 1793293511.335835,
       "timestamp_str": "2026-10-29 20:05:11",
       "agent": "opencode:reforge-followup"
+    },
+    {
+      "task_id": "reforge:run-1",
+      "phase": "reforge stage 16",
+      "phase_num": 3,
+      "description": "Reforge stage 16: run resumed",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1793293593.0520797,
+      "timestamp_str": "2026-10-29 20:06:33",
+      "agent": "opencode"
+    },
+    {
+      "task_id": "reforge:run-1",
+      "phase": "reforge stage 17",
+      "phase_num": 3,
+      "description": "Reforge stage 17: window 51, 3 commit(s), 12 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1793293621.5881867,
+      "timestamp_str": "2026-10-29 20:07:01",
+      "agent": "opencode"
+    },
+    {
+      "task_id": "reforge:run-1",
+      "phase": "reforge stage 18",
+      "phase_num": 3,
+      "description": "Reforge stage 18: window 54, 3 commit(s), 6 file(s) reviewed (unreviewed), 5 finding(s), 0 repaired (regression=4, reliability=1)",
+      "files_affected": [
+        "document_processor.py",
+        "ui.py"
+      ],
+      "status": "in_progress",
+      "timestamp": 1793293676.6778276,
+      "timestamp_str": "2026-10-29 20:07:56",
+      "agent": "opencode"
+    },
+    {
+      "task_id": "reforge:run-1",
+      "phase": "reforge stage 19",
+      "phase_num": 3,
+      "description": "Reforge stage 19: window 57, 3 commit(s), 2 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1793293745.6325848,
+      "timestamp_str": "2026-10-29 20:09:05",
+      "agent": "opencode"
+    },
+    {
+      "task_id": "reforge:run-1",
+      "phase": "reforge stage 20",
+      "phase_num": 3,
+      "description": "Reforge stage 20: window 60, 3 commit(s), 0 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1793293787.304811,
+      "timestamp_str": "2026-10-29 20:09:47",
+      "agent": "opencode"
+    },
+    {
+      "task_id": "reforge:run-1",
+      "phase": "reforge stage 21",
+      "phase_num": 3,
+      "description": "Reforge stage 21: window 63, 3 commit(s), 2 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired, 2 binary not analysed",
+      "files_affected": [
+        "__pycache__/document_processor.cpython-312.pyc",
+        "tests/__pycache__/test_document_processor.cpython-312.pyc"
+      ],
+      "status": "in_progress",
+      "timestamp": 1793293821.8970268,
+      "timestamp_str": "2026-10-29 20:10:21",
+      "agent": "opencode"
+    },
+    {
+      "task_id": "reforge:run-1",
+      "phase": "reforge stage 22",
+      "phase_num": 3,
+      "description": "Reforge stage 22: window 66, 3 commit(s), 7 file(s) reviewed (unreviewed), 10 finding(s), 0 repaired, 1 binary not analysed (regression=10)",
+      "files_affected": [
+        "anki_integration.py",
+        "document_processor.py",
+        "ui.py",
+        "__pycache__/document_processor.cpython-312.pyc"
+      ],
+      "status": "in_progress",
+      "timestamp": 1793293876.5183642,
+      "timestamp_str": "2026-10-29 20:11:16",
+      "agent": "opencode"
+    },
+    {
+      "task_id": "reforge:run-1",
+      "phase": "reforge stage 23",
+      "phase_num": 3,
+      "description": "Reforge stage 23: window 69, 3 commit(s), 3 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1793293963.5977929,
+      "timestamp_str": "2026-10-29 20:12:43",
+      "agent": "opencode"
+    },
+    {
+      "task_id": "reforge:run-1",
+      "phase": "reforge stage 24",
+      "phase_num": 3,
+      "description": "Reforge stage 24: window 72, 3 commit(s), 1 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired, 1 binary not analysed",
+      "files_affected": [
+        "banner.png"
+      ],
+      "status": "in_progress",
+      "timestamp": 1793294026.4455001,
+      "timestamp_str": "2026-10-29 20:13:46",
+      "agent": "opencode"
+    },
+    {
+      "task_id": "reforge:run-1",
+      "phase": "reforge stage 25",
+      "phase_num": 3,
+      "description": "Reforge stage 25: window 73, 1 commit(s), 2 file(s) reviewed (unreviewed), 0 finding(s), 0 repaired",
+      "files_affected": [],
+      "status": "in_progress",
+      "timestamp": 1793294068.026145,
+      "timestamp_str": "2026-10-29 20:14:28",
+      "agent": "opencode"
     }
   ]
 }
