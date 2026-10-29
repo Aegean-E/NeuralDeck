@@ -8,9 +8,9 @@
 ## 📊 Codebase Metrics
 - **Total Python Modules**: `23`
 - **Total Classes**: `47`
-- **Total Top-Level Functions**: `40`
-- **Total Class Methods**: `217`
-- **Total Source Lines**: `4740`
+- **Total Top-Level Functions**: `41`
+- **Total Class Methods**: `218`
+- **Total Source Lines**: `4780`
 
 ---
 
@@ -62,7 +62,7 @@
 ---
 
 ### [`document_processor.py`](document_processor.py)
-**Size**: `939` lines (`41537` bytes)
+**Size**: `970` lines (`42500` bytes)
 
 **Functions:**
 - `def extract_text_from_pdf(file_path, log_callback)` - *Extracts text from a PDF file.*
@@ -73,6 +73,7 @@
 - `def check_llm_server(api_url, api_key)` - *Checks if the LLM server is reachable.*
 - `def call_lm_studio(prompt, system_instruction, api_url, api_key, model, temperature, max_tokens, stop_callback, timeout)` - *Calls the local LM Studio server (OpenAI compatible API).*
 - `def smart_chunk_text(text, max_chars, min_chars)` - *Splits text into chunks respecting paragraph boundaries.*
+- `def _strip_trailing_commas(text)` - *Remove commas before a closing brace or bracket, ignoring quoted strings.*
 - `def robust_parse_objects(text)` - *Scans the text for JSON objects and extracts them individually.*
 - `def refine_generated_cards(cards, deck_names, target_language, api_url, api_key, model, temperature, log_callback, stop_callback)` - *Sends the generated cards back to the AI for a second pass to fix errors, *
 - `def filter_and_process_cards(raw_data_list, deck_names, smart_deck_match, filter_yes_no)` - *Helper to clean, filter, and assign decks to a list of raw card objects.*
@@ -158,7 +159,7 @@
 ---
 
 ### [`tests/run_tests.py`](tests/run_tests.py)
-**Size**: `14` lines (`324` bytes)
+**Size**: `14` lines (`364` bytes)
 
 ---
 
@@ -253,13 +254,14 @@
 ---
 
 ### [`tests/test_document_processor.py`](tests/test_document_processor.py)
-**Size**: `301` lines (`11860` bytes)
+**Size**: `308` lines (`12263` bytes)
 
 **Classes:**
 - `class TestDocumentProcessor`
   - Method `.test_robust_parse_objects_standard()`
   - Method `.test_robust_parse_objects_markdown()`
   - Method `.test_robust_parse_objects_markdown_with_nested_code()`
+  - Method `.test_robust_parse_objects_preserves_commas_before_closing_characters()`
   - Method `.test_robust_parse_objects_multiple_objects()`
   - Method `.test_robust_parse_objects_wrapper()`
   - Method `.test_robust_parse_objects_nested()`
@@ -360,7 +362,7 @@
 ---
 
 ### [`tests/test_settings_io.py`](tests/test_settings_io.py)
-**Size**: `433` lines (`18842` bytes)
+**Size**: `433` lines (`18832` bytes)
 
 **Classes:**
 - `class TestApplicationDir`
@@ -442,7 +444,7 @@
 ---
 
 ### [`ui.py`](ui.py)
-**Size**: `891` lines (`41777` bytes)
+**Size**: `893` lines (`41837` bytes)
 
 **Classes:**
 - `class TextWidgetHandler` - *Custom logging handler that writes to a Tkinter ScrolledText widget thread-safely.*

@@ -320,18 +320,48 @@ def smart_chunk_text(text, max_chars, min_chars=100):
         return []
 
     merged_chunks = []
-    current_merge = chunks[0]
+    for chunk in chunks:
+        if not merged_chunks:
+            merged_chunks.append(chunk)
+            continue
 
-    for i in range(1, len(chunks)):
-        next_chunk = chunks[i]
-        if len(current_merge) < min_chars and (len(current_merge) + len(next_chunk) <= max_chars):
-            current_merge += next_chunk
+        last = merged_chunks[-1]
+        if len(chunk) < min_chars and len(last) + len(chunk) <= max_chars:
+            merged_chunks[-1] += chunk
+        elif len(last) < min_chars and len(last) + len(chunk) <= max_chars:
+            merged_chunks[-1] += chunk
         else:
-            merged_chunks.append(current_merge)
-            current_merge = next_chunk
-    merged_chunks.append(current_merge)
+            merged_chunks.append(chunk)
 
     return merged_chunks
+
+def _strip_trailing_commas(text):
+    """Remove commas before a closing brace or bracket, ignoring quoted strings."""
+    result = []
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            result.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            result.append(char)
+            continue
+        if char == ",":
+            lookahead = index + 1
+            while lookahead < len(text) and text[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(text) and text[lookahead] in "}]":
+                continue
+        result.append(char)
+    return "".join(result)
 
 def robust_parse_objects(text):
     """
@@ -346,9 +376,8 @@ def robust_parse_objects(text):
         list: A list of extracted dictionary objects representing cards.
     """
     # 1. Pre-processing to fix common LLM JSON errors
-    # Fix trailing commas (e.g. {"a": 1,} -> {"a": 1}) which cause JSONDecodeError
-    text = re.sub(r",\s*}", "}", text)
-    text = re.sub(r",\s*]", "]", text)
+    # Remove trailing commas outside strings; a regex would edit string values too.
+    text = _strip_trailing_commas(text)
 
     text = text.strip()
 
@@ -710,10 +739,12 @@ def _process_chunk_task(i, chunk, total_chunks, stop_callback, log_callback, max
 
     return chunk_cards
 
-def generate_qa_pairs(text, deck_names=[], target_language="English", log_callback=None, api_url="http://localhost:1234/v1/chat/completions", api_key="lm-studio", model="local-model", temperature=0.7, max_tokens=-1, prompt_style="", context_window=4096, concurrency=1, card_density="Medium", partial_result_callback=None, stop_callback=None, filter_yes_no=True, exclude_trivia=True, smart_deck_match=True, ai_refinement=False, deterministic_mode=False, pipeline_stats=None):
+def generate_qa_pairs(text, deck_names=None, target_language="English", log_callback=None, api_url="http://localhost:1234/v1/chat/completions", api_key="lm-studio", model="local-model", temperature=0.7, max_tokens=-1, prompt_style="", context_window=4096, concurrency=1, card_density="Medium", partial_result_callback=None, stop_callback=None, filter_yes_no=True, exclude_trivia=True, smart_deck_match=True, ai_refinement=False, deterministic_mode=False, pipeline_stats=None):
     """
     Generates Q&A pairs from the given text using a Local LLM.
     """
+    deck_names = list(deck_names) if deck_names else []
+
     if not pipeline_stats:
         pipeline_stats = PipelineStats()
 

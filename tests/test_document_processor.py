@@ -39,6 +39,13 @@ class TestDocumentProcessor(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]['answer'], 'Use ```python print()```')
 
+    def test_robust_parse_objects_preserves_commas_before_closing_characters(self):
+        text = '{"question": "What is ,} and ,]?", "answer": "Use ,} and ,] literally",}'
+        result = robust_parse_objects(text)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['question'], 'What is ,} and ,]?')
+        self.assertEqual(result[0]['answer'], 'Use ,} and ,] literally')
+
     def test_robust_parse_objects_multiple_objects(self):
         text = '{"question": "Q3", "answer": "A3"}\n{"question": "Q4", "answer": "A4"}'
         result = robust_parse_objects(text)

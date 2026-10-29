@@ -5,7 +5,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 loader = unittest.TestLoader()
-start_dir = ''
+start_dir = os.path.dirname(os.path.abspath(__file__))
 suite = loader.discover(start_dir, pattern='test_*.py')
 
 runner = unittest.TextTestRunner(verbosity=2)

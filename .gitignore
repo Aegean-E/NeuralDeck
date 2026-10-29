@@ -15,3 +15,7 @@ session_cache.json
 .aikit/*.bak
 .aikit/*.tmp_*
 .aikit/*.corrupt_*
+.aikit/reforge.reviews/
+# AIKit transient state
+*.py[cod]
+node_modules/

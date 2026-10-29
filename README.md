@@ -72,6 +72,7 @@
 NeuralDeck/
 ├── README.md
 ├── .gitignore
+├── assets/
 ├── COMMERCIAL.md
 ├── .aikit/                  <- project memory: project, guidelines, decisions, ledger, map
 ├── .github/

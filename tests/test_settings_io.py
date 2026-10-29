@@ -415,7 +415,7 @@ class TestExampleConfig(unittest.TestCase):
         example = Path(__file__).resolve().parent.parent / "config.example.json"
         data = json.loads(example.read_text(encoding="utf-8"))
         self.assertIsInstance(data, dict)
-        self.assertEqual(set(data), set(CONFIG_DEFAULTS))
+        self.assertEqual(data, CONFIG_DEFAULTS)
         self.assertEqual(data.get("selected_decks"), [])
 
     def test_runtime_requirements_are_pinned(self):

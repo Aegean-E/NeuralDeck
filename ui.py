@@ -129,9 +129,11 @@ class AnkiGeneratorUI(ttk.Window):
             cleanup_stale_temp_files(state_file)
         self.load_config()
         theme = self.config.get("theme", "darkly")
+        if theme == "cerulean":
+            theme = "cerculean"
         if theme not in THEMES:
             theme = "darkly"
-            self.config["theme"] = theme
+        self.config["theme"] = theme
         super().__init__(themename=theme)
         
         self.title("NeuralDeck")
